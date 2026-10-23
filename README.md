@@ -1,118 +1,152 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# The Story Machine - Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The Story Machine is intended to be a community platform for creating,
+publishing, reading, and discussing interactive stories. Readers will be able to
+shape stories through their choices, connecting authors and readers around
+shared storytelling.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Project overview
 
-## Description
+The backend is built with NestJS and TypeScript. It currently provides:
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- A root greeting endpoint.
+- A versioned user API scaffold with create, list, read, update, and delete
+  routes.
+- MongoDB connection configuration through `MONGO_URI`.
+- Helmet security headers, CORS, and Pino-based application logging.
 
-## Project setup
+The user service is currently a scaffold: its methods return placeholder
+messages rather than persisting user records. Interactive-story features are
+part of the product vision but are not implemented in this API yet.
 
-```bash
-$ npm install
-```
+## Prerequisites
 
-## Compile and run the project
+- Node.js 26 or newer
+- npm
+- A MongoDB instance for running the application (the app reads its connection
+  string from `MONGO_URI`)
+
+## Get started
+
+Install dependencies:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm ci
 ```
 
-## Run tests
+Create a `.env` file in the project root based on `.env.example`, then set the
+values for your local environment:
+
+values for the current enviroment
+```dotenv
+PORT = <port>
+MONGO_URI = <uri>
+LOG_LEVEL = info
+AZURE_STORAGE_CONNECTION_STRING=<azure connection string>
+AZURE_STORAGE_CONTAINER=<azure container string>
+```
+
+Start the app in watch mode:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run start:dev
 ```
 
-## Deployment
+The server listens on port `4563` by default, or on the port set in `PORT`.
+Routes use the `/api` prefix and URI version `v1`; for example:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- `GET /api/v1` — root greeting
+- `POST /api/v1/user` — create-user scaffold
+- `GET /api/v1/user` — list-users scaffold
+- `GET /api/v1/user/:id` — get-user scaffold
+- `PATCH /api/v1/user/:id` — update-user scaffold
+- `DELETE /api/v1/user/:id` — delete-user scaffold
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Common commands
+
+| Task | Command |
+| --- | --- |
+| Start in watch mode | `npm run start:dev` |
+| Start normally | `npm run start` |
+| Start with debugger and watch mode | `npm run start:debug` |
+| Build for production | `npm run build` |
+| Run the production build | `npm run start:prod` |
+| Run unit tests | `npm test` |
+| Run unit tests in watch mode | `npm run test:watch` |
+| Run end-to-end tests (in-memory MongoDB, nothing to set up) | `npm run test:e2e` |
+| Run unit and end-to-end tests with one coverage report | `npm run test:cov` |
+| Lint source and tests | `npm run lint` |
+| Lint and fail on warnings | `npm run lint:ci` |
+| Check TypeScript types | `npm run typecheck` |
+| Format source and tests | `npm run format` |
+| Check formatting without changing files | `npm run format:check` |
+
+To prepare and run the production build:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm ci
+npm run build
+npm run start:prod
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Project structure
 
-## Observability
+Each feature lives in its own folder under `src/` with the usual Nest layout:
+a module, a controller (the routes), a service (the business logic), `dto/`
+(request and response shapes, with their validation rules) and `entities/`
+(the MongoDB schemas). Unit tests sit next to the file they test as
+`*.spec.ts`.
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+```text
+src/
+  main.ts                    Starts the app: /api prefix, v1 versioning, Swagger at /api/docs, Helmet, CORS
+  app.module.ts              Wires everything together: config, MongoDB, logging, global validation and responses
+  app.controller.ts          Root greeting endpoint
+  app.service.ts
+  user/                      Users: register, list, get and update profiles
+    entities/                User schema
+    dto/                     Create, update and response shapes
+    enums/                   User roles
+  story/                     Stories: create, list, get, update, publish and delete,
+                             plus uploading and downloading the .txt draft file
+    entities/                Story schema, with its characters and chapter order
+    dto/                     Create, update, list-query, character and response shapes
+    enums/                   Story status (draft or published)
+  chapter/                   Chapters of a story, returned in the story JSON format
+    entities/                Chapter schema and the typed chapter script (lines, flags, variables)
+    dto/                     Create, update, script and response shapes
+    check-script.ts          Checks a script before saving: line ids, jumps, flags and characters
+  storage/                   Saves and loads files in Azure Blob Storage
+  common/                    Shared by every feature
+    decorators/              @ResponseMessage, the message sent with a successful response
+    dto/                     Pagination query (page, limit)
+    exceptions/              AppException, for errors that name the fields at fault
+    filters/                 Turns every error into { success: false, message, errors }
+    interceptors/            Wraps every success in { success: true, message, data }
+    interfaces/              The response and error types
+    logger/                  Pino logging setup
+    pipes/                   Request validation and MongoDB id checking
+    swagger/                 Decorators that describe responses and id params in Swagger
+test/
+  app.e2e-spec.ts            End-to-end test of the whole app (needs MongoDB)
+  fixtures/                  Example stories from our story JSON docs, used as test data
+docs/                        Vision statement and sprint deliverables
+.github/workflows/ci.yml     CI: lint, format check, tests, build, security audit
+Dockerfile                   Container image for deployment
+```
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+## Documentation
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
+- [Vision statement](./docs/vision.md)
+- [Sprint 0 deliverables](./docs/sprint0.md)
+- [Sprint 1 deliverables](./docs/sprint1.md)
 
-This project is already instrumented. Create a free account at [observe.nestjs.com](https://observe.nestjs.com), add an application, and paste the generated app key and secret into the `ObserveModule.forRoot()` call in `src/app.module.ts`.
+## Group members
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Lara De Leon
+- Carsten Kolynchuk
+- Colin Leger
+- Arthur McMullen
+- Krupal Patel
+- Adejare Taiwo
+- Oluwanifemi Tawoju
