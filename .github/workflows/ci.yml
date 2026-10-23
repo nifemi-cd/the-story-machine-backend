@@ -23,9 +23,9 @@ jobs:
       - run: npm run lint:ci
       - run: npm run format:check
       - run: npm run typecheck
-      - run: npm test -- --coverage
-      # Uses an in-memory MongoDB and fake file storage, so no secrets needed
-      - run: npm run test:e2e
+      # Unit and e2e tests together, with one coverage report for both.
+      # The e2e tests use an in-memory MongoDB and fake file storage, so no secrets needed
+      - run: npm run test:cov
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
 

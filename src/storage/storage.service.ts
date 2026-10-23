@@ -1,4 +1,4 @@
-import { Injectable, type OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BlobServiceClient, type ContainerClient } from '@azure/storage-blob';
 
@@ -8,6 +8,7 @@ import { BlobServiceClient, type ContainerClient } from '@azure/storage-blob';
 @Injectable()
 export class StorageService implements OnModuleInit {
   private readonly container: ContainerClient;
+  private readonly logger = new Logger(StorageService.name);
 
   constructor(configService: ConfigService) {
     const client = BlobServiceClient.fromConnectionString(
@@ -45,8 +46,18 @@ export class StorageService implements OnModuleInit {
   }
 
   // deletes a file, returns nothing
-  // ignore errors so deleting a file that's already gone doesn't fail
+  // a file that's already gone is fine (e.g. a story that never had a draft).
+  // any other error (network, expired key) is logged instead of thrown, so
+  // the story delete that called this still succeeds, but the leftover file
+  // shows up in the logs and can be cleaned up by hand
   async delete(name: string): Promise<void> {
-    await this.container.deleteBlob(name).catch(() => undefined);
+    try {
+      await this.container.getBlockBlobClient(name).deleteIfExists();
+    } catch (error) {
+      this.logger.error(
+        `Couldn't delete ${name}, it's been left in storage`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 }

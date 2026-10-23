@@ -73,8 +73,8 @@ Routes use the `/api` prefix and URI version `v1`; for example:
 | Run the production build | `npm run start:prod` |
 | Run unit tests | `npm test` |
 | Run unit tests in watch mode | `npm run test:watch` |
-| Run end-to-end tests | `npm run test:e2e` |
-| Run tests with coverage | `npm run test:cov` |
+| Run end-to-end tests (in-memory MongoDB, nothing to set up) | `npm run test:e2e` |
+| Run unit and end-to-end tests with one coverage report | `npm run test:cov` |
 | Lint source and tests | `npm run lint` |
 | Lint and fail on warnings | `npm run lint:ci` |
 | Check TypeScript types | `npm run typecheck` |
