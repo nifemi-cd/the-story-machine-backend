@@ -65,12 +65,12 @@ The frontend's reader and the backend have to agree on the story JSON format, so
 
 #### End-to-End Tests
 
-These start the whole app exactly as it runs for real (the same modules, validation, response format and `/api/v1` URLs) and send real HTTP requests to every route. Each test file gets its own throwaway in-memory MongoDB, and Azure storage is replaced with an in-memory fake (`test/support/`), so the tests need no secrets or internet and never touch our real data. That also means they run in CI.
+These start the whole app exactly as it runs for real (the same modules, validation, response format and `/api/v1` URLs) and send real HTTP requests to every route. Each test starts with an empty database: a throwaway in-memory MongoDB, with Azure storage replaced by an in-memory fake (`test/support/`), so the tests need no secrets or internet and never touch our real data. That also means they run in CI.
 
-- **Users** (`user.e2e-spec.ts`): registering, duplicate emails and usernames, weak passwords, paging through users and updating profiles, and that a password is never sent back.
+- **Users** (`user.e2e-spec.ts`): registering, duplicate emails and usernames, weak passwords, paging through users and updating profiles (email and password can't be changed there), and that a password is never sent back.
 - **Stories** (`story.e2e-spec.ts`): creating, listing and filtering, publishing and unpublishing, deleting, and the draft file: uploading a `.txt`, replacing it, downloading it as plain text, and rejecting a missing file, a file that isn't plain text and a file over 10 MB.
-- **Chapters** (`chapter.e2e-spec.ts`): adding a chapter with and without its script, getting it back in the story JSON format, rejecting invalid scripts, saving a new script, deleting a chapter (later chapters move up), and that a chapter can't be reached through a different story.
-- **App** (`app.e2e-spec.ts`): the app starts and answers in the `{ success, message, data }` wrapper.
+- **Chapters** (`chapter.e2e-spec.ts`): adding a chapter with and without its script, getting it back in the story JSON format, rejecting invalid scripts, saving a new script (the "Lion at the Door" example), renaming (which also updates the story's `chapterOrder`), deleting a chapter (later chapters move up), and that a chapter can't be reached through a different story.
+- **App** (`app.e2e-spec.ts`): the root route (`GET /api/v1`) answers in the `{ success, message, data }` wrapper.
 
 Across these, the tests also check invalid ids (400), missing records (404) and fields a client isn't allowed to send.
 
@@ -112,7 +112,7 @@ On GitHub Actions, each repository has a workflow called **CI**. It runs wheneve
 **As the pipeline matures:** we plan to add some more checks:
 
 - **Coverage threshold:** make CI fail if test coverage drops below a set percentage
-- **Browser tests in CI:** the backend's end-to-end tests already run in CI; we plan to add a frontend job that runs browser tests too (through Playwright for example)
+- **Frontend end-to-end tests in CI:** the backend's end-to-end tests already run in CI, so the next step is a frontend job that runs browser tests (through Playwright for example)
 
 ## 4 API Documentation
 
