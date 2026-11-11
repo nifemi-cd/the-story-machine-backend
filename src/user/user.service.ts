@@ -14,7 +14,8 @@ import {
 } from './entities/user.entity.js';
 
 // higher = slower to hash, which makes brute forcing passwords harder
-const SALT_ROUNDS = 12;
+// exported so the password reset in AuthService hashes the same way
+export const SALT_ROUNDS = 12;
 
 // error code mongo gives when a unique index is broken
 const DUPLICATE_KEY = 11000;

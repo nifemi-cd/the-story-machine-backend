@@ -4,10 +4,8 @@ import { CreateStoryDto } from './create-story.dto.js';
 import { UpdateStoryDto } from './update-story.dto.js';
 import { ListStoriesQueryDto } from './list-stories-query.dto.js';
 
-const valid = {
-  authorId: '6ad4306d3168a59d2918aead',
-  title: 'The Lighthouse Keeper',
-};
+const authorId = '6ad4306d3168a59d2918aead';
+const valid = { title: 'The Lighthouse Keeper' };
 
 // does the same thing the ValidationPipe does and returns which fields failed
 async function errorsFor<T extends object>(cls: new () => T, input: object) {
@@ -57,7 +55,6 @@ describe('CreateStoryDto', () => {
   });
 
   it.each([
-    ['authorId', { authorId: 'not-an-id' }],
     ['title', { title: '   ' }],
     ['title', { title: 'x'.repeat(121) }],
     ['characters', { characters: [{ name: 'Dave' }, { name: 'Dave' }] }],
@@ -83,7 +80,8 @@ describe('CreateStoryDto', () => {
     ).toContain(field);
   });
 
-  it.each(['status', 'chapterOrder', 'likeCount', 'draftUrl'])(
+  // the author is always the logged in user, so it can't be sent either
+  it.each(['authorId', 'status', 'chapterOrder', 'likeCount', 'draftUrl'])(
     'does not let clients set %s',
     async (field) => {
       expect(
@@ -97,7 +95,7 @@ describe('UpdateStoryDto', () => {
   it('accepts a status but not a new author', async () => {
     const { fields } = await errorsFor(UpdateStoryDto, {
       status: 'published',
-      authorId: valid.authorId,
+      authorId,
     });
 
     expect(fields).toEqual(['authorId']);
@@ -114,7 +112,7 @@ describe('ListStoriesQueryDto', () => {
   it('keeps the pagination defaults and accepts filters', async () => {
     const { dto, fields } = await errorsFor(ListStoriesQueryDto, {
       status: 'published',
-      authorId: valid.authorId,
+      authorId,
     });
 
     expect(fields).toEqual([]);

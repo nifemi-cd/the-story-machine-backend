@@ -4,6 +4,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module.js';
+import { AuthModule } from './auth/auth.module.js';
 import { StoryModule } from './story/story.module.js';
 import { ChapterModule } from './chapter/chapter.module.js';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -47,6 +48,7 @@ import { createLoggerParams } from './common/logger/logger.config.js';
       }),
     }),
     UserModule,
+    AuthModule,
     StoryModule,
     ChapterModule,
   ],

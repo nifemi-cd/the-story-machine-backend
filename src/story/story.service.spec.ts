@@ -17,6 +17,9 @@ const execResolving = (value: unknown) => ({
 describe('StoryService', () => {
   let service: StoryService;
   const authorId = new Types.ObjectId().toString();
+  // the logged in user, who wrote the stories below unless a test says otherwise
+  const userId = new Types.ObjectId(authorId);
+  const someoneElse = new Types.ObjectId();
   // find() is chained (sort, skip, limit) so each step returns the same mock
   const query = {
     sort: vi.fn(() => query),
@@ -41,7 +44,6 @@ describe('StoryService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    userModel.exists.mockResolvedValue({ _id: authorId });
     storyModel.create.mockImplementation((doc: object) =>
       Promise.resolve({ _id: 'new-id', ...doc }),
     );
@@ -60,18 +62,29 @@ describe('StoryService', () => {
     service = module.get<StoryService>(StoryService);
   });
 
+  // returns a findById mock result for a story with these fields
+  // written by the logged in user unless authorId is overridden
+  const storyFound = (fields: object = {}) =>
+    execResolving({ authorId: userId, ...fields });
+
+  // returns the error a promise rejects with
+  const errorFrom = (promise: Promise<unknown>) =>
+    promise.catch((e: unknown) => e) as Promise<AppException>;
+
   describe('create', () => {
-    const dto = { authorId, title: 'The Lighthouse Keeper' };
+    const dto = { title: 'The Lighthouse Keeper' };
 
-    it('saves the story when the author exists', async () => {
-      await service.create({ ...dto });
+    it('saves the story with the logged in user as the author', async () => {
+      await service.create(userId, { ...dto });
 
-      expect(userModel.exists).toHaveBeenCalledWith({ _id: authorId });
-      expect(storyModel.create).toHaveBeenCalledWith(dto);
+      expect(storyModel.create).toHaveBeenCalledWith({
+        ...dto,
+        authorId: userId,
+      });
     });
 
     it('keeps a sent default emotion where it is instead of adding another', async () => {
-      await service.create({
+      await service.create(userId, {
         ...dto,
         characters: [
           {
@@ -84,6 +97,7 @@ describe('StoryService', () => {
 
       expect(storyModel.create).toHaveBeenCalledWith({
         ...dto,
+        authorId: userId,
         characters: [
           {
             name: 'Cindy',
@@ -95,17 +109,6 @@ describe('StoryService', () => {
           },
         ],
       });
-    });
-
-    it('rejects an unknown author with a 400 on authorId', async () => {
-      userModel.exists.mockResolvedValue(null);
-
-      const error = await service.create({ ...dto }).catch((e: unknown) => e);
-
-      expect(error).toBeInstanceOf(AppException);
-      expect((error as AppException).getStatus()).toBe(400);
-      expect(error).toMatchObject({ errors: [{ field: 'authorId' }] });
-      expect(storyModel.create).not.toHaveBeenCalled();
     });
   });
 
@@ -203,6 +206,9 @@ describe('StoryService', () => {
     const updated = { _id: id, title: 'New' };
 
     beforeEach(() => {
+      storyModel.findById.mockReturnValue(
+        storyFound({ status: StoryStatus.Draft }),
+      );
       storyModel.findByIdAndUpdate.mockReturnValue(execResolving(updated));
     });
 
@@ -211,7 +217,7 @@ describe('StoryService', () => {
 
     it('applies only the sent fields and returns the updated story', async () => {
       await expect(
-        service.update(id, { title: 'New', description: undefined }),
+        service.update(id, userId, { title: 'New', description: undefined }),
       ).resolves.toBe(updated);
 
       expect(storyModel.findByIdAndUpdate).toHaveBeenCalledWith(
@@ -219,12 +225,22 @@ describe('StoryService', () => {
         { title: 'New' },
         { returnDocument: 'after', runValidators: true },
       );
-      // no status means it shouldn't bother loading the story first
-      expect(storyModel.findById).not.toHaveBeenCalled();
+    });
+
+    it('rejects a story someone else wrote with a 403 and changes nothing', async () => {
+      storyModel.findById.mockReturnValue(
+        storyFound({ authorId: someoneElse }),
+      );
+
+      const error = await errorFrom(service.update(id, userId, { title: 'X' }));
+
+      expect(error).toBeInstanceOf(AppException);
+      expect(error.getStatus()).toBe(403);
+      expect(storyModel.findByIdAndUpdate).not.toHaveBeenCalled();
     });
 
     it('replaces the characters, adding the default emotion', async () => {
-      await service.update(id, {
+      await service.update(id, userId, {
         characters: [{ name: 'Dave', emotions: [{ emotion: 'angry' }] }],
       });
 
@@ -243,11 +259,7 @@ describe('StoryService', () => {
     });
 
     it('sets publishedAt when a draft is published', async () => {
-      storyModel.findById.mockReturnValue(
-        execResolving({ status: StoryStatus.Draft }),
-      );
-
-      await service.update(id, { status: StoryStatus.Published });
+      await service.update(id, userId, { status: StoryStatus.Published });
 
       expect(sentChanges()).toEqual({
         status: StoryStatus.Published,
@@ -257,10 +269,10 @@ describe('StoryService', () => {
 
     it('clears publishedAt when a story goes back to draft', async () => {
       storyModel.findById.mockReturnValue(
-        execResolving({ status: StoryStatus.Published }),
+        storyFound({ status: StoryStatus.Published }),
       );
 
-      await service.update(id, { status: StoryStatus.Draft });
+      await service.update(id, userId, { status: StoryStatus.Draft });
 
       expect(sentChanges()).toEqual({
         status: StoryStatus.Draft,
@@ -270,22 +282,29 @@ describe('StoryService', () => {
 
     it('keeps the original publishedAt when re-sending the same status', async () => {
       storyModel.findById.mockReturnValue(
-        execResolving({ status: StoryStatus.Published }),
+        storyFound({ status: StoryStatus.Published }),
       );
 
-      await service.update(id, { status: StoryStatus.Published });
+      await service.update(id, userId, { status: StoryStatus.Published });
 
       expect(sentChanges()).toEqual({});
     });
 
     it('throws a 404 when the story does not exist', async () => {
+      storyModel.findById.mockReturnValue(execResolving(null));
+
+      const error = await errorFrom(service.update(id, userId, { title: 'X' }));
+
+      expect(error.getStatus()).toBe(404);
+      expect(storyModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the story is deleted while updating', async () => {
       storyModel.findByIdAndUpdate.mockReturnValue(execResolving(null));
 
-      const error = await service
-        .update(id, { title: 'New' })
-        .catch((e: unknown) => e);
+      const error = await errorFrom(service.update(id, userId, { title: 'X' }));
 
-      expect((error as AppException).getStatus()).toBe(404);
+      expect(error.getStatus()).toBe(404);
     });
   });
 
@@ -293,13 +312,13 @@ describe('StoryService', () => {
     const id = new Types.ObjectId();
 
     beforeEach(() => {
+      storyModel.findById.mockReturnValue(storyFound({ _id: id }));
+      storyModel.findByIdAndDelete.mockReturnValue(execResolving({ _id: id }));
       chapterModel.deleteMany.mockReturnValue(execResolving({}));
     });
 
     it('deletes the story, then its chapters and draft file', async () => {
-      storyModel.findByIdAndDelete.mockReturnValue(execResolving({ _id: id }));
-
-      await expect(service.remove(id)).resolves.toBeUndefined();
+      await expect(service.remove(id, userId)).resolves.toBeUndefined();
       expect(storyModel.findByIdAndDelete).toHaveBeenCalledWith(id);
       expect(chapterModel.deleteMany).toHaveBeenCalledWith({ storyId: id });
       expect(storage.delete).toHaveBeenCalledWith(
@@ -307,12 +326,20 @@ describe('StoryService', () => {
       );
     });
 
-    it('throws a 404 and deletes nothing else when the story does not exist', async () => {
-      storyModel.findByIdAndDelete.mockReturnValue(execResolving(null));
+    it.each([
+      ['a 404 when the story does not exist', null, 404],
+      [
+        'a 403 when someone else wrote the story',
+        { authorId: someoneElse },
+        403,
+      ],
+    ])('throws %s and deletes nothing', async (_label, found, status) => {
+      storyModel.findById.mockReturnValue(execResolving(found));
 
-      const error = await service.remove(id).catch((e: unknown) => e);
+      const error = await errorFrom(service.remove(id, userId));
 
-      expect((error as AppException).getStatus()).toBe(404);
+      expect(error.getStatus()).toBe(status);
+      expect(storyModel.findByIdAndDelete).not.toHaveBeenCalled();
       expect(chapterModel.deleteMany).not.toHaveBeenCalled();
       expect(storage.delete).not.toHaveBeenCalled();
     });
@@ -327,7 +354,7 @@ describe('StoryService', () => {
     const url = `https://example.blob.core.windows.net/stories/drafts/${id.toString()}.txt`;
 
     beforeEach(() => {
-      storyModel.findById.mockReturnValue(execResolving({ _id: id }));
+      storyModel.findById.mockReturnValue(storyFound({ _id: id }));
       storage.upload.mockResolvedValue(url);
       storyModel.findByIdAndUpdate.mockReturnValue(
         execResolving({ _id: id, draftUrl: url }),
@@ -335,7 +362,7 @@ describe('StoryService', () => {
     });
 
     it('uploads the file and saves its URL as draftUrl', async () => {
-      const story = await service.uploadFile(id, textFile);
+      const story = await service.uploadFile(id, userId, textFile);
 
       expect(storage.upload).toHaveBeenCalledWith(
         `drafts/${id.toString()}.txt`,
@@ -357,21 +384,28 @@ describe('StoryService', () => {
         { ...textFile, mimetype: 'image/png' } as Express.Multer.File,
       ],
     ])('throws a 400 naming the file field when %s', async (_, file) => {
-      const error = await service.uploadFile(id, file).catch((e: unknown) => e);
+      const error = await service
+        .uploadFile(id, userId, file)
+        .catch((e: unknown) => e);
 
       expect((error as AppException).getStatus()).toBe(400);
       expect((error as AppException).errors?.[0].field).toBe('file');
       expect(storage.upload).not.toHaveBeenCalled();
     });
 
-    it('throws a 404 and uploads nothing when the story does not exist', async () => {
-      storyModel.findById.mockReturnValue(execResolving(null));
+    it.each([
+      ['a 404 when the story does not exist', null, 404],
+      [
+        'a 403 when someone else wrote the story',
+        { authorId: someoneElse },
+        403,
+      ],
+    ])('throws %s and uploads nothing', async (_label, found, status) => {
+      storyModel.findById.mockReturnValue(execResolving(found));
 
-      const error = await service
-        .uploadFile(id, textFile)
-        .catch((e: unknown) => e);
+      const error = await errorFrom(service.uploadFile(id, userId, textFile));
 
-      expect((error as AppException).getStatus()).toBe(404);
+      expect(error.getStatus()).toBe(status);
       expect(storage.upload).not.toHaveBeenCalled();
     });
   });

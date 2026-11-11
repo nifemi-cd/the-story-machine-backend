@@ -4,7 +4,6 @@ import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
-  IsMongoId,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -17,17 +16,9 @@ import { CharacterDto } from './character.dto.js';
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
-// new stories always start as an empty draft, chapters get added separately
+// new stories always start as an empty draft, chapters get added separately.
+// there's no authorId here, the author is whoever is logged in
 export class CreateStoryDto {
-  // TODO take this from the logged in user once auth is done
-  @ApiProperty({
-    description:
-      'Id of the user writing the story. Will come from the login session once auth exists.',
-    example: '6ad4306d3168a59d2918aead',
-  })
-  @IsMongoId()
-  authorId: string;
-
   @ApiProperty({ example: 'The Lighthouse Keeper', maxLength: 120 })
   @Transform(trim)
   @IsString()

@@ -1,17 +1,21 @@
 import request from 'supertest';
 import { Types } from 'mongoose';
 import { createTestApp, type TestApp } from './support/test-app.js';
+import { signUpAndLogin } from './support/auth.js';
 
 describe('Stories (e2e)', () => {
   let testApp: TestApp;
   let authorId: string;
+  // Ada's "Bearer <token>" header, she writes every story in these tests
+  let auth: string;
   const api = () => request(testApp.app.getHttpServer());
   const missingId = new Types.ObjectId().toString();
 
   async function createStory(title = 'The Lighthouse Keeper') {
     const res = await api()
       .post('/api/v1/story')
-      .send({ authorId, title })
+      .set('Authorization', auth)
+      .send({ title })
       .expect(201);
     return res.body.data._id as string;
   }
@@ -22,16 +26,8 @@ describe('Stories (e2e)', () => {
 
   beforeEach(async () => {
     await testApp.clearDatabase();
-    // stories need a real author
-    const res = await api()
-      .post('/api/v1/user')
-      .send({
-        email: 'ada@example.com',
-        username: 'ada_writes',
-        password: 'Story!Time2026',
-      })
-      .expect(201);
-    authorId = res.body.data._id;
+    // stories need a logged in author
+    ({ id: authorId, auth } = await signUpAndLogin(testApp));
   });
 
   afterAll(async () => {
@@ -42,7 +38,8 @@ describe('Stories (e2e)', () => {
     it('creates an empty draft', async () => {
       const res = await api()
         .post('/api/v1/story')
-        .send({ authorId, title: '  The Lighthouse Keeper  ' })
+        .set('Authorization', auth)
+        .send({ title: '  The Lighthouse Keeper  ' })
         .expect(201);
 
       expect(res.body).toMatchObject({
@@ -61,7 +58,8 @@ describe('Stories (e2e)', () => {
     it('rejects a missing title with a field error', async () => {
       const res = await api()
         .post('/api/v1/story')
-        .send({ authorId })
+        .set('Authorization', auth)
+        .send({})
         .expect(400);
 
       expect(res.body.success).toBe(false);
@@ -74,7 +72,8 @@ describe('Stories (e2e)', () => {
     it('rejects fields that are not in the DTO', async () => {
       const res = await api()
         .post('/api/v1/story')
-        .send({ authorId, title: 'Sneaky', likeCount: 999 })
+        .set('Authorization', auth)
+        .send({ title: 'Sneaky', likeCount: 999 })
         .expect(400);
 
       expect(res.body.errors).toContainEqual(
@@ -82,17 +81,23 @@ describe('Stories (e2e)', () => {
       );
     });
 
-    it('rejects an author that does not exist', async () => {
+    it('takes the author from the login, so authorId cannot be sent', async () => {
       const res = await api()
         .post('/api/v1/story')
-        .send({ authorId: missingId, title: 'Orphan' })
+        .set('Authorization', auth)
+        .send({ authorId: missingId, title: 'Not mine' })
         .expect(400);
 
-      expect(res.body).toMatchObject({
-        success: false,
-        message: 'Author not found',
-        errors: [{ field: 'authorId' }],
-      });
+      expect(res.body.errors).toContainEqual(
+        expect.objectContaining({ field: 'authorId' }),
+      );
+    });
+
+    it('rejects a request that is not logged in with a 401', async () => {
+      await api()
+        .post('/api/v1/story')
+        .send({ title: 'Anonymous' })
+        .expect(401);
     });
   });
 
@@ -118,6 +123,7 @@ describe('Stories (e2e)', () => {
       await createStory('Still a draft');
       await api()
         .patch(`/api/v1/story/${id}`)
+        .set('Authorization', auth)
         .send({ status: 'published' })
         .expect(200);
 
@@ -166,6 +172,7 @@ describe('Stories (e2e)', () => {
 
       const res = await api()
         .patch(`/api/v1/story/${id}`)
+        .set('Authorization', auth)
         .send({ description: 'A storm, a stranger.' })
         .expect(200);
 
@@ -180,12 +187,14 @@ describe('Stories (e2e)', () => {
 
       const published = await api()
         .patch(`/api/v1/story/${id}`)
+        .set('Authorization', auth)
         .send({ status: 'published' })
         .expect(200);
       expect(published.body.data.publishedAt).toEqual(expect.any(String));
 
       const draft = await api()
         .patch(`/api/v1/story/${id}`)
+        .set('Authorization', auth)
         .send({ status: 'draft' })
         .expect(200);
       expect(draft.body.data.publishedAt).toBeNull();
@@ -196,6 +205,7 @@ describe('Stories (e2e)', () => {
 
       await api()
         .patch(`/api/v1/story/${id}`)
+        .set('Authorization', auth)
         .send({ authorId: missingId })
         .expect(400);
     });
@@ -203,6 +213,7 @@ describe('Stories (e2e)', () => {
     it('returns 404 for a story that does not exist', async () => {
       await api()
         .patch(`/api/v1/story/${missingId}`)
+        .set('Authorization', auth)
         .send({ title: 'Nope' })
         .expect(404);
     });
@@ -213,13 +224,17 @@ describe('Stories (e2e)', () => {
       const id = await createStory();
       await api()
         .put(`/api/v1/story/${id}/file`)
+        .set('Authorization', auth)
         .attach('file', Buffer.from('Once upon a time...'), {
           filename: 'draft.txt',
           contentType: 'text/plain',
         })
         .expect(200);
 
-      const res = await api().delete(`/api/v1/story/${id}`).expect(200);
+      const res = await api()
+        .delete(`/api/v1/story/${id}`)
+        .set('Authorization', auth)
+        .expect(200);
 
       expect(res.body).toEqual({
         success: true,
@@ -231,7 +246,10 @@ describe('Stories (e2e)', () => {
     });
 
     it('returns 404 for a story that does not exist', async () => {
-      await api().delete(`/api/v1/story/${missingId}`).expect(404);
+      await api()
+        .delete(`/api/v1/story/${missingId}`)
+        .set('Authorization', auth)
+        .expect(404);
     });
   });
 
@@ -239,6 +257,7 @@ describe('Stories (e2e)', () => {
     const upload = (id: string, content: Buffer, contentType = 'text/plain') =>
       api()
         .put(`/api/v1/story/${id}/file`)
+        .set('Authorization', auth)
         .attach('file', content, { filename: 'draft.txt', contentType });
 
     it('stores the file and sets draftUrl', async () => {
@@ -272,7 +291,10 @@ describe('Stories (e2e)', () => {
     it('rejects a request with no file', async () => {
       const id = await createStory();
 
-      const res = await api().put(`/api/v1/story/${id}/file`).expect(400);
+      const res = await api()
+        .put(`/api/v1/story/${id}/file`)
+        .set('Authorization', auth)
+        .expect(400);
 
       expect(res.body.errors).toEqual([
         expect.objectContaining({ field: 'file' }),
@@ -307,6 +329,7 @@ describe('Stories (e2e)', () => {
       const id = await createStory();
       await api()
         .put(`/api/v1/story/${id}/file`)
+        .set('Authorization', auth)
         .attach('file', Buffer.from('Once upon a time...'), {
           filename: 'draft.txt',
           contentType: 'text/plain',
@@ -335,6 +358,73 @@ describe('Stories (e2e)', () => {
 
     it('returns 404 for a story that does not exist', async () => {
       await api().get(`/api/v1/story/${missingId}/file`).expect(404);
+    });
+  });
+
+  // every route that changes a story is for its author only
+  describe('when someone other than the author tries to change a story', () => {
+    let storyId: string;
+    let graceAuth: string;
+
+    beforeEach(async () => {
+      storyId = await createStory();
+      ({ auth: graceAuth } = await signUpAndLogin(testApp, 'grace'));
+    });
+
+    // returns each write request on the story, without its auth header yet
+    const writes = () => ({
+      'PATCH /story/:id': api()
+        .patch(`/api/v1/story/${storyId}`)
+        .send({ title: 'Stolen' }),
+      'DELETE /story/:id': api().delete(`/api/v1/story/${storyId}`),
+      'PUT /story/:id/file': api()
+        .put(`/api/v1/story/${storyId}/file`)
+        .attach('file', Buffer.from('Not mine'), {
+          filename: 'draft.txt',
+          contentType: 'text/plain',
+        }),
+    });
+
+    it.each(['PATCH /story/:id', 'DELETE /story/:id', 'PUT /story/:id/file'])(
+      '%s rejects another user with a 403',
+      async (route) => {
+        const res = await writes()
+          [route as keyof ReturnType<typeof writes>].set(
+            'Authorization',
+            graceAuth,
+          )
+          .expect(403);
+
+        expect(res.body).toEqual({
+          success: false,
+          message: 'Only the author can change this story',
+        });
+      },
+    );
+
+    it.each(['PATCH /story/:id', 'DELETE /story/:id', 'PUT /story/:id/file'])(
+      '%s rejects a request that is not logged in with a 401',
+      async (route) => {
+        await writes()[route as keyof ReturnType<typeof writes>].expect(401);
+      },
+    );
+
+    it('leaves the story and its file untouched', async () => {
+      await writes()['PATCH /story/:id'].set('Authorization', graceAuth);
+      await writes()['DELETE /story/:id'].set('Authorization', graceAuth);
+      await writes()['PUT /story/:id/file'].set('Authorization', graceAuth);
+
+      const res = await api().get(`/api/v1/story/${storyId}`).expect(200);
+      expect(res.body.data).toMatchObject({
+        title: 'The Lighthouse Keeper',
+        draftUrl: null,
+      });
+      expect(testApp.storage.files.size).toBe(0);
+    });
+
+    it('still lets anyone read the story without logging in', async () => {
+      await api().get(`/api/v1/story/${storyId}`).expect(200);
+      await api().get('/api/v1/story').expect(200);
     });
   });
 });
