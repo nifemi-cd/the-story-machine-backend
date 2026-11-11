@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
 import { getModelToken } from '@nestjs/mongoose';
 import { StoryController } from './story.controller.js';
 import { StoryService } from './story.service.js';
@@ -19,6 +20,8 @@ describe('StoryController', () => {
         { provide: getModelToken(User.name), useValue: {} },
         { provide: getModelToken(Chapter.name), useValue: {} },
         { provide: StorageService, useValue: {} },
+        // JwtAuthGuard on the write routes needs it
+        { provide: JwtService, useValue: {} },
       ],
     }).compile();
 

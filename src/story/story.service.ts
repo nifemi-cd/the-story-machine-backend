@@ -26,14 +26,17 @@ export class StoryService {
     private readonly storage: StorageService,
   ) {}
 
-  // creates a draft story and returns it
-  async create(createStoryDto: CreateStoryDto): Promise<StoryDocument> {
-    // mongo won't stop us saving a fake authorId, so check it here
-    await this.authorExist(createStoryDto.authorId);
-
+  // creates a draft story written by this user and returns it
+  // authorId comes from the login token, so JwtAuthGuard already checked
+  // the user exists
+  async create(
+    authorId: Types.ObjectId,
+    createStoryDto: CreateStoryDto,
+  ): Promise<StoryDocument> {
     const { characters, ...fields } = createStoryDto;
     return await this.storyModel.create({
       ...fields,
+      authorId,
       ...(characters && { characters: toCharacters(characters) }),
     });
   }
@@ -86,42 +89,47 @@ export class StoryService {
   }
 
   // updates the fields that were sent and returns the updated story
+  // only the story's author can do this
   async update(
     id: Types.ObjectId,
+    userId: Types.ObjectId,
     updateStoryDto: UpdateStoryDto,
   ): Promise<StoryDocument> {
+    const story = await this.findOwnStory(id, userId);
+
     const { characters, status, ...fields } = updateStoryDto;
     const changes: Record<string, unknown> = withoutUndefined(fields);
     if (characters) changes.characters = toCharacters(characters);
 
     // only reset publishedAt if the status is actually different, otherwise
     // re-sending "published" would bump the date every time
-    if (status) {
-      const story = await this.findStoryById(id);
-      if (story.status !== status) {
-        changes.status = status;
-        changes.publishedAt =
-          status === StoryStatus.Published ? new Date() : null;
-      }
+    if (status && story.status !== status) {
+      changes.status = status;
+      changes.publishedAt =
+        status === StoryStatus.Published ? new Date() : null;
     }
 
-    const story = await this.storyModel
+    const updated = await this.storyModel
       .findByIdAndUpdate(id, changes, {
         returnDocument: 'after',
         // schema rules like maxlength don't run on updates unless we ask
         runValidators: true,
       })
       .exec();
-    if (!story) {
+    // could happen if the story got deleted after we found it above
+    if (!updated) {
       throw AppException.notfound('Story not found');
     }
-    return story;
+    return updated;
   }
 
   // deletes the story along with its chapters and file, returns nothing
+  // only the story's author can do this
   // deletes the story first, so if cleaning up chapters or the file fails
   // we're left with leftovers nobody can see instead of a broken story
-  async remove(id: Types.ObjectId): Promise<void> {
+  async remove(id: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
+    await this.findOwnStory(id, userId);
+
     const story = await this.storyModel.findByIdAndDelete(id).exec();
     if (!story) {
       throw AppException.notfound('Story not found');
@@ -131,8 +139,10 @@ export class StoryService {
   }
 
   // saves the txt file to storage and returns the story with draftUrl set
+  // only the story's author can do this
   async uploadFile(
     id: Types.ObjectId,
+    userId: Types.ObjectId,
     file?: Express.Multer.File,
   ): Promise<StoryDocument> {
     if (!file || file.mimetype !== 'text/plain') {
@@ -144,8 +154,9 @@ export class StoryService {
         },
       ]);
     }
-    // check before uploading so we don't store files for stories that don't exist
-    await this.findStoryById(id);
+    // check before uploading so we don't store files for stories that don't
+    // exist or that belong to someone else
+    await this.findOwnStory(id, userId);
 
     const url = await this.storage.upload(
       draftFileName(id),
@@ -169,6 +180,20 @@ export class StoryService {
       throw AppException.notfound('This story has no file yet');
     }
     return await this.storage.download(draftFileName(id));
+  }
+
+  // returns the story if this user is its author
+  // throws a 404 if it doesn't exist, or a 403 if someone else wrote it.
+  // the chapter routes use this too, since only the author can change chapters
+  async findOwnStory(
+    id: Types.ObjectId,
+    userId: Types.ObjectId,
+  ): Promise<StoryDocument> {
+    const story = await this.findStoryById(id);
+    if (!story.authorId.equals(userId)) {
+      throw AppException.forbidden('Only the author can change this story');
+    }
+    return story;
   }
 
   // throws a 404 if the story doesn't exist, returns nothing
@@ -232,19 +257,6 @@ export class StoryService {
       throw AppException.notfound('Story not found');
     }
     return story;
-  }
-
-  // throws a 400 if the author doesn't exist
-  private async authorExist(authorId: string) {
-    if (!(await this.userModel.exists({ _id: authorId }))) {
-      throw AppException.badRequest('Author not found', [
-        {
-          field: 'authorId',
-          message: 'authorId must belong to an existing user',
-          success: false,
-        },
-      ]);
-    }
   }
 }
 

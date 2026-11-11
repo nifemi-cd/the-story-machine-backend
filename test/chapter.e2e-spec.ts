@@ -2,10 +2,12 @@ import request from 'supertest';
 import { Types } from 'mongoose';
 import { createTestApp, type TestApp } from './support/test-app.js';
 import { lionScript } from './fixtures/story-json.js';
+import { signUpAndLogin } from './support/auth.js';
 
 describe('Chapters (e2e)', () => {
   let testApp: TestApp;
-  let authorId: string;
+  // Ada's "Bearer <token>" header, she wrote the story in these tests
+  let auth: string;
   let storyId: string;
   const api = () => request(testApp.app.getHttpServer());
   const missingId = new Types.ObjectId().toString();
@@ -14,6 +16,7 @@ describe('Chapters (e2e)', () => {
   async function createChapter(chapter_name = 'Chapter 1') {
     const res = await api()
       .post(chaptersUrl())
+      .set('Authorization', auth)
       .send({ chapter_name })
       .expect(201);
     return res.body.data.chapter_id as string;
@@ -32,19 +35,11 @@ describe('Chapters (e2e)', () => {
     await testApp.clearDatabase();
     // a chapter needs a story and a story needs an author. the characters
     // match the ones used in lionScript
-    const user = await api()
-      .post('/api/v1/user')
-      .send({
-        email: 'ada@example.com',
-        username: 'ada_writes',
-        password: 'Story!Time2026',
-      })
-      .expect(201);
-    authorId = user.body.data._id;
+    ({ auth } = await signUpAndLogin(testApp));
     const story = await api()
       .post('/api/v1/story')
+      .set('Authorization', auth)
       .send({
-        authorId,
         title: 'The Lion at the Door',
         characters: [
           {
@@ -73,6 +68,7 @@ describe('Chapters (e2e)', () => {
     it('adds a chapter with an empty script', async () => {
       const res = await api()
         .post(chaptersUrl())
+        .set('Authorization', auth)
         .send({ chapter_name: 'Chapter 1' })
         .expect(201);
 
@@ -93,6 +89,7 @@ describe('Chapters (e2e)', () => {
     it('adds a chapter with its script', async () => {
       const res = await api()
         .post(chaptersUrl())
+        .set('Authorization', auth)
         .send({ chapter_name: 'Chapter 1', story: lionScript })
         .expect(201);
 
@@ -112,7 +109,11 @@ describe('Chapters (e2e)', () => {
     });
 
     it('rejects a missing chapter_name', async () => {
-      const res = await api().post(chaptersUrl()).send({}).expect(400);
+      const res = await api()
+        .post(chaptersUrl())
+        .set('Authorization', auth)
+        .send({})
+        .expect(400);
 
       expect(res.body.errors).toContainEqual(
         expect.objectContaining({ field: 'chapter_name' }),
@@ -131,6 +132,7 @@ describe('Chapters (e2e)', () => {
 
       const res = await api()
         .post(chaptersUrl())
+        .set('Authorization', auth)
         .send({ chapter_name: 'Chapter 1', story: script })
         .expect(400);
 
@@ -142,6 +144,7 @@ describe('Chapters (e2e)', () => {
     it('rejects an invalid storyId', async () => {
       const res = await api()
         .post('/api/v1/story/123/chapter')
+        .set('Authorization', auth)
         .send({ chapter_name: 'Chapter 1' })
         .expect(400);
 
@@ -151,6 +154,7 @@ describe('Chapters (e2e)', () => {
     it('returns 404 for a story that does not exist', async () => {
       await api()
         .post(`/api/v1/story/${missingId}/chapter`)
+        .set('Authorization', auth)
         .send({ chapter_name: 'Chapter 1' })
         .expect(404);
     });
@@ -210,7 +214,8 @@ describe('Chapters (e2e)', () => {
       const id = await createChapter();
       const otherStory = await api()
         .post('/api/v1/story')
-        .send({ authorId, title: 'Another story' })
+        .set('Authorization', auth)
+        .send({ title: 'Another story' })
         .expect(201);
 
       await api()
@@ -225,6 +230,7 @@ describe('Chapters (e2e)', () => {
 
       const res = await api()
         .patch(`${chaptersUrl()}/${id}`)
+        .set('Authorization', auth)
         .send({ chapter_name: 'The Door' })
         .expect(200);
 
@@ -240,6 +246,7 @@ describe('Chapters (e2e)', () => {
 
       await api()
         .patch(`${chaptersUrl()}/${id}`)
+        .set('Authorization', auth)
         .send({ story: lionScript })
         .expect(400);
     });
@@ -247,6 +254,7 @@ describe('Chapters (e2e)', () => {
     it('returns 404 for a chapter that does not exist', async () => {
       await api()
         .patch(`${chaptersUrl()}/${missingId}`)
+        .set('Authorization', auth)
         .send({ chapter_name: 'Nope' })
         .expect(404);
     });
@@ -258,7 +266,10 @@ describe('Chapters (e2e)', () => {
       const second = await createChapter('Chapter 2');
       await createChapter('Chapter 3');
 
-      const res = await api().delete(`${chaptersUrl()}/${second}`).expect(200);
+      const res = await api()
+        .delete(`${chaptersUrl()}/${second}`)
+        .set('Authorization', auth)
+        .expect(200);
 
       expect(res.body).toEqual({
         success: true,
@@ -270,7 +281,10 @@ describe('Chapters (e2e)', () => {
     });
 
     it('returns 404 for a chapter that does not exist', async () => {
-      await api().delete(`${chaptersUrl()}/${missingId}`).expect(404);
+      await api()
+        .delete(`${chaptersUrl()}/${missingId}`)
+        .set('Authorization', auth)
+        .expect(404);
     });
   });
 
@@ -280,6 +294,7 @@ describe('Chapters (e2e)', () => {
 
       const res = await api()
         .put(`${chaptersUrl()}/${id}/script`)
+        .set('Authorization', auth)
         .send(lionScript)
         .expect(200);
 
@@ -297,6 +312,7 @@ describe('Chapters (e2e)', () => {
 
       const res = await api()
         .put(`${chaptersUrl()}/${id}/script`)
+        .set('Authorization', auth)
         .send(script)
         .expect(400);
 
@@ -308,6 +324,7 @@ describe('Chapters (e2e)', () => {
 
       const res = await api()
         .put(`${chaptersUrl()}/${id}/script`)
+        .set('Authorization', auth)
         .send({ lines: [] })
         .expect(400);
 
@@ -319,8 +336,77 @@ describe('Chapters (e2e)', () => {
     it('returns 404 for a chapter that does not exist', async () => {
       await api()
         .put(`${chaptersUrl()}/${missingId}/script`)
+        .set('Authorization', auth)
         .send(lionScript)
         .expect(404);
+    });
+  });
+
+  // adding, changing and deleting chapters is for the story's author only
+  describe("when someone other than the author tries to change the story's chapters", () => {
+    let chapterId: string;
+    let graceAuth: string;
+
+    beforeEach(async () => {
+      chapterId = await createChapter();
+      ({ auth: graceAuth } = await signUpAndLogin(testApp, 'grace'));
+    });
+
+    // returns each write request, without its auth header yet
+    const writes = () => ({
+      'POST chapter': api()
+        .post(chaptersUrl())
+        .send({ chapter_name: 'Sneaky' }),
+      'PATCH chapter': api()
+        .patch(`${chaptersUrl()}/${chapterId}`)
+        .send({ chapter_name: 'Sneaky' }),
+      'DELETE chapter': api().delete(`${chaptersUrl()}/${chapterId}`),
+      'PUT chapter script': api()
+        .put(`${chaptersUrl()}/${chapterId}/script`)
+        .send(lionScript),
+    });
+    const routes = [
+      'POST chapter',
+      'PATCH chapter',
+      'DELETE chapter',
+      'PUT chapter script',
+    ] as const;
+
+    it.each(routes)('%s rejects another user with a 403', async (route) => {
+      const res = await writes()
+        [route].set('Authorization', graceAuth)
+        .expect(403);
+
+      expect(res.body).toEqual({
+        success: false,
+        message: 'Only the author can change this story',
+      });
+    });
+
+    it.each(routes)(
+      '%s rejects a request that is not logged in with a 401',
+      async (route) => {
+        await writes()[route].expect(401);
+      },
+    );
+
+    it('leaves the chapters untouched', async () => {
+      for (const route of routes) {
+        await writes()[route].set('Authorization', graceAuth);
+      }
+
+      expect(await chapterNames()).toEqual(['Chapter 1']);
+      const res = await api().get(`${chaptersUrl()}/${chapterId}`).expect(200);
+      expect(res.body.data.story).toEqual({
+        flags: {},
+        variables: [],
+        lines: [],
+      });
+    });
+
+    it('still lets anyone read the chapters without logging in', async () => {
+      await api().get(chaptersUrl()).expect(200);
+      await api().get(`${chaptersUrl()}/${chapterId}`).expect(200);
     });
   });
 });

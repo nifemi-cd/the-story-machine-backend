@@ -20,6 +20,8 @@ async function bootstrap() {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('The Story Machine API')
     .setVersion('1')
+    // adds the Authorize button so routes behind JwtAuthGuard can be tried out
+    .addBearerAuth()
     // any route can crash so the 500 is added to all of them here instead of one by one
     .addGlobalResponse({
       status: 500,
