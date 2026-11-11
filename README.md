@@ -44,7 +44,16 @@ MONGO_URI = <uri>
 LOG_LEVEL = info
 AZURE_STORAGE_CONNECTION_STRING=<azure connection string>
 AZURE_STORAGE_CONTAINER=<azure container string>
+JWT_SECRET=<long random string>
+JWT_EXPIRES_IN=3600
+PASSWORD_RESET_URL=http://localhost:4200/reset-password
 ```
+
+`JWT_SECRET` is required, the server won't start without it. `JWT_EXPIRES_IN`
+is how many seconds a login lasts (1 hour if left out), and
+`PASSWORD_RESET_URL` is the frontend page the reset link points to. There's no
+email service yet, so outside production the reset link is printed in the
+server logs instead of being emailed.
 
 Start the app in watch mode:
 
@@ -57,10 +66,14 @@ Routes use the `/api` prefix and URI version `v1`; for example:
 
 - `GET /api/v1` — root greeting
 - `POST /api/v1/user` — create-user scaffold
-- `GET /api/v1/user` — list-users scaffold
-- `GET /api/v1/user/:id` — get-user scaffold
+- `GET /api/v1/user` — list users (admins only)
+- `GET /api/v1/user/:id` — get a user by id (admins only)
 - `PATCH /api/v1/user/:id` — update-user scaffold
 - `DELETE /api/v1/user/:id` — delete-user scaffold
+- `POST /api/v1/auth/login` — log in with email and password, returns a token
+- `POST /api/v1/auth/forgot-password` — send a password reset link
+- `POST /api/v1/auth/reset-password` — set a new password with the reset token
+- `GET /api/v1/auth/me` — the logged in user (send `Authorization: Bearer <token>`)
 
 ## Common commands
 
@@ -107,6 +120,11 @@ src/
     entities/                User schema
     dto/                     Create, update and response shapes
     enums/                   User roles
+  auth/                      Login, password reset and the logged in user
+    dto/                     Login, forgot-password, reset-password and response shapes
+    guards/                  JwtAuthGuard (needs a valid login token) and RolesGuard (needs a role from @Roles)
+    decorators/              @CurrentUser, the user JwtAuthGuard found, and @Roles, the roles a route needs
+  mail/                      Sends emails for any feature (only logs them for now, no email service yet)
   story/                     Stories: create, list, get, update, publish and delete,
                              plus uploading and downloading the .txt draft file
     entities/                Story schema, with its characters and chapter order

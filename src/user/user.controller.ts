@@ -6,8 +6,9 @@ import {
   Patch,
   Param,
   Query,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Types } from 'mongoose';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto.js';
 import { UserService } from './user.service.js';
@@ -21,6 +22,10 @@ import {
   ApiError,
 } from '../common/swagger/api-response.decorators.js';
 import { ApiObjectIdParam } from '../common/swagger/api-param.decorators.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
+import { UserRole } from './enums/user-role.enum.js';
 
 @ApiTags('Users')
 @Controller({ path: 'user', version: '1' })
@@ -42,26 +47,40 @@ export class UserController {
     return this.userService.create(createUserDto);
   }
 
-  // returns one page of users
+  // returns one page of users, admins only
+  // JwtAuthGuard has to come first, RolesGuard needs the user it finds
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Admin)
   @ResponseMessage('Users fetched')
-  @ApiOperation({ summary: 'List users', description: 'Newest users first.' })
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'List users',
+    description: 'Newest users first. Admins only.',
+  })
   @ApiEnvelope(UserResponseDto, {
     description: 'Users fetched',
     paginated: true,
   })
   @ApiError(400, 'page or limit is not a whole number in range')
+  @ApiError(401, 'Login required')
+  @ApiError(403, 'You do not have permission to do this')
   findAll(@Query() query: PaginationQueryDto) {
     return this.userService.findAll(query);
   }
 
-  // returns one user
+  // returns one user, admins only
   @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Admin)
   @ResponseMessage('User fetched')
-  @ApiOperation({ summary: 'Get a user by id' })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get a user by id', description: 'Admins only.' })
   @ApiObjectIdParam('User')
   @ApiEnvelope(UserResponseDto, { description: 'User fetched' })
   @ApiError(400, 'The id is not a valid 24-character hex string')
+  @ApiError(401, 'Login required')
+  @ApiError(403, 'You do not have permission to do this')
   @ApiError(404, 'User not found')
   findOne(@Param('id', ParseObjectIdPipe) id: Types.ObjectId) {
     return this.userService.findOne(id);

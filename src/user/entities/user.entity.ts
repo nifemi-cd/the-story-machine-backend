@@ -17,9 +17,19 @@ export class User {
   @Prop({ required: true, select: false })
   passwordHash: string;
 
-  // increasing this will log the user out everywhere once we have auth
+  // goes into every login token, increasing it logs the user out everywhere
+  // (resetting the password does this)
   @Prop({ default: 0 })
   tokenVersion: number;
+
+  // only the sha256 of the reset token is saved, so someone who can read the
+  // database still can't use it. select false like passwordHash
+  @Prop({ select: false })
+  passwordResetTokenHash?: string;
+
+  // the reset token stops working after this
+  @Prop({ select: false })
+  passwordResetExpiresAt?: Date;
 
   @Prop({ trim: true })
   displayName: string;
@@ -59,6 +69,10 @@ UserSchema.index(
   { unique: true, collation: USERNAME_COLLATION },
 );
 
+// resetting a password looks the user up by this. sparse because most users
+// don't have a reset token, so they're left out of the index
+UserSchema.index({ passwordResetTokenHash: 1 }, { sparse: true });
+
 // select false doesn't apply to what create() returns, so we also strip
 // the hash here to make sure it never ends up in a response
 UserSchema.set('toJSON', {
@@ -67,6 +81,8 @@ UserSchema.set('toJSON', {
     const {
       passwordHash: _passwordHash,
       tokenVersion: _tokenVersion,
+      passwordResetTokenHash: _passwordResetTokenHash,
+      passwordResetExpiresAt: _passwordResetExpiresAt,
       ...safe
     } = ret;
     return safe;
