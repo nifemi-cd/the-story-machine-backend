@@ -25,6 +25,8 @@ import { ApiObjectIdParam } from '../common/swagger/api-param.decorators.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import type { UserDocument } from './entities/user.entity.js';
 import { UserRole } from './enums/user-role.enum.js';
 
 @ApiTags('Users')
@@ -86,13 +88,39 @@ export class UserController {
     return this.userService.findOne(id);
   }
 
-  // updates a user's profile and returns the updated user
-  @Patch(':id')
+  // updates the logged in user's own profile and returns it
+  // no id in the path, the user comes from the login token, so there's no
+  // way to point this at somebody else's profile
+  @Patch()
+  @UseGuards(JwtAuthGuard)
   @ResponseMessage('User updated')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update your own profile',
+    description:
+      'Send only the fields to change. Email and password cannot be changed here.',
+  })
+  @ApiEnvelope(UserResponseDto, { description: 'User updated' })
+  @ApiError(400, 'A field failed validation, or email/password was sent')
+  @ApiError(401, 'Login required')
+  @ApiError(409, 'Username already taken by another user')
+  updateOwn(
+    @CurrentUser() user: UserDocument,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return this.userService.update(user._id, updateUserDto);
+  }
+
+  // updates any user's profile and returns the updated user, admins only
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Admin)
+  @ResponseMessage('User updated')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: "Update a user's profile",
     description:
-      'Send only the fields to change. Email and password cannot be changed here.',
+      'Send only the fields to change. Email and password cannot be changed here. Admins only; users update their own profile with PATCH /user.',
   })
   @ApiObjectIdParam('User')
   @ApiEnvelope(UserResponseDto, { description: 'User updated' })
@@ -100,6 +128,8 @@ export class UserController {
     400,
     'Invalid id, a field failed validation, or email/password was sent',
   )
+  @ApiError(401, 'Login required')
+  @ApiError(403, 'You do not have permission to do this')
   @ApiError(404, 'User not found')
   @ApiError(409, 'Username already taken by another user')
   update(

@@ -227,28 +227,55 @@ describe('Users (e2e)', () => {
     });
   });
 
-  describe('PATCH /api/v1/user/:id', () => {
-    it('updates only the fields sent', async () => {
+  describe('PATCH /api/v1/user', () => {
+    it("updates only the fields sent on the logged in user's own profile", async () => {
       const id = await createUser();
+      const own = await authHeader();
 
       const res = await api()
-        .patch(`/api/v1/user/${id}`)
+        .patch('/api/v1/user')
+        .set('Authorization', own)
         .send({ bio: 'I read mysteries.' })
         .expect(200);
 
       expect(res.body.data).toMatchObject({
+        _id: id,
         username: 'ada_writes',
         bio: 'I read mysteries.',
       });
     });
 
+    it('only ever changes the logged in user', async () => {
+      const graceId = await createUser({
+        email: 'grace@example.com',
+        username: 'grace',
+      });
+      await createUser();
+      const own = await authHeader();
+      const admin = await adminHeader();
+
+      await api()
+        .patch('/api/v1/user')
+        .set('Authorization', own)
+        .send({ bio: 'Changed' })
+        .expect(200);
+
+      const grace = await api()
+        .get(`/api/v1/user/${graceId}`)
+        .set('Authorization', admin)
+        .expect(200);
+      expect(grace.body.data.bio).toBe('');
+    });
+
     it.each(['email', 'password'])(
       'does not allow changing %s',
       async (field) => {
-        const id = await createUser();
+        await createUser();
+        const own = await authHeader();
 
         const res = await api()
-          .patch(`/api/v1/user/${id}`)
+          .patch('/api/v1/user')
+          .set('Authorization', own)
           .send({ [field]: 'New!Value2026' })
           .expect(400);
 
@@ -260,17 +287,64 @@ describe('Users (e2e)', () => {
 
     it('rejects a username that belongs to another user', async () => {
       await createUser({ email: 'grace@example.com', username: 'grace' });
-      const id = await createUser();
+      await createUser();
+      const own = await authHeader();
 
       await api()
-        .patch(`/api/v1/user/${id}`)
+        .patch('/api/v1/user')
+        .set('Authorization', own)
         .send({ username: 'grace' })
         .expect(409);
     });
 
+    it('rejects a request that is not logged in with a 401', async () => {
+      await api().patch('/api/v1/user').send({ bio: 'Nobody' }).expect(401);
+    });
+  });
+
+  describe('PATCH /api/v1/user/:id', () => {
+    it("lets an admin update any user's profile", async () => {
+      const id = await createUser();
+      const admin = await adminHeader();
+
+      const res = await api()
+        .patch(`/api/v1/user/${id}`)
+        .set('Authorization', admin)
+        .send({ bio: 'Edited by an admin.' })
+        .expect(200);
+
+      expect(res.body.data).toMatchObject({
+        _id: id,
+        bio: 'Edited by an admin.',
+      });
+    });
+
+    it('rejects a user who is not an admin with a 403, even for themselves', async () => {
+      const id = await createUser();
+      const own = await authHeader();
+
+      await api()
+        .patch(`/api/v1/user/${id}`)
+        .set('Authorization', own)
+        .send({ bio: 'Sneaky' })
+        .expect(403);
+    });
+
+    it('rejects a request that is not logged in with a 401', async () => {
+      const id = await createUser();
+
+      await api()
+        .patch(`/api/v1/user/${id}`)
+        .send({ bio: 'Sneaky' })
+        .expect(401);
+    });
+
     it('returns 404 for a user that does not exist', async () => {
+      const admin = await adminHeader();
+
       await api()
         .patch(`/api/v1/user/${missingId}`)
+        .set('Authorization', admin)
         .send({ bio: 'Nobody' })
         .expect(404);
     });

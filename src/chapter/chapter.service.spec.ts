@@ -5,6 +5,7 @@ import { lionCharacters, lionScript } from '../../test/fixtures/story-json.js';
 import { AppException } from '../common/exceptions/app.exception.js';
 import { Story, StorySchema } from '../story/entities/story.entity.js';
 import { StoryService } from '../story/story.service.js';
+import type { UserDocument } from '../user/entities/user.entity.js';
 import { ChapterService } from './chapter.service.js';
 import type { ScriptDto } from './dto/script.dto.js';
 import { Chapter, ChapterSchema } from './entities/chapter.entity.js';
@@ -31,6 +32,13 @@ describe('ChapterService', () => {
     title: 'The Lion at the Door',
     characters: lionCharacters,
   });
+
+  // the logged in user, who wrote the story. writes use their username as
+  // the author instead of looking it up
+  const user = {
+    _id: story.authorId,
+    username: 'mock-author',
+  } as UserDocument;
 
   const chapterDoc = (fields: object = {}) =>
     new ChapterModel({
@@ -70,6 +78,7 @@ describe('ChapterService', () => {
     removeChapter: vi.fn(),
     renameChapter: vi.fn(),
     findWithAuthorName: vi.fn(),
+    findOwnStory: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -78,6 +87,7 @@ describe('ChapterService', () => {
       story,
       author: 'mock-author',
     });
+    storyService.findOwnStory.mockResolvedValue(story);
     storyService.addChapter.mockResolvedValue(2);
     chapterModel.create.mockImplementation((doc: object) =>
       Promise.resolve(new ChapterModel(doc)),
@@ -99,7 +109,7 @@ describe('ChapterService', () => {
 
   describe('create', () => {
     it('adds the chapter to the story and saves it at that position', async () => {
-      await service.create(storyId, { chapter_name: 'Chapter 1' });
+      await service.create(storyId, user, { chapter_name: 'Chapter 1' });
 
       const [sentStoryId, chapterId, title] = storyService.addChapter.mock
         .calls[0] as [Types.ObjectId, Types.ObjectId, string];
@@ -116,7 +126,7 @@ describe('ChapterService', () => {
     });
 
     it('returns the contract shape with an empty story when none is sent', async () => {
-      const result = await service.create(storyId, {
+      const result = await service.create(storyId, user, {
         chapter_name: 'Chapter 1',
       });
 
@@ -129,7 +139,7 @@ describe('ChapterService', () => {
     });
 
     it('saves a sent story and returns it', async () => {
-      const result = await service.create(storyId, {
+      const result = await service.create(storyId, user, {
         chapter_name: 'Chapter 1',
         story: script,
       });
@@ -145,7 +155,7 @@ describe('ChapterService', () => {
       broken.lines[2].dialogue!.name = 'Bob';
 
       const error = await service
-        .create(storyId, { chapter_name: 'Chapter 1', story: broken })
+        .create(storyId, user, { chapter_name: 'Chapter 1', story: broken })
         .catch((e: unknown) => e);
 
       expect((error as AppException).getStatus()).toBe(400);
@@ -157,12 +167,12 @@ describe('ChapterService', () => {
     });
 
     it('does not save the chapter when the story does not exist', async () => {
-      storyService.findWithAuthorName.mockRejectedValue(
+      storyService.findOwnStory.mockRejectedValue(
         AppException.notfound('Story not found'),
       );
 
       const error = await service
-        .create(storyId, { chapter_name: 'Chapter 1' })
+        .create(storyId, user, { chapter_name: 'Chapter 1' })
         .catch((e: unknown) => e);
 
       expect((error as AppException).getStatus()).toBe(404);
@@ -175,7 +185,7 @@ describe('ChapterService', () => {
       chapterModel.create.mockRejectedValue(dbError);
 
       await expect(
-        service.create(storyId, { chapter_name: 'Chapter 1' }),
+        service.create(storyId, user, { chapter_name: 'Chapter 1' }),
       ).rejects.toBe(dbError);
 
       const chapterId = storyService.addChapter.mock.calls[0][1] as unknown;
@@ -247,7 +257,7 @@ describe('ChapterService', () => {
         execResolving(chapterDoc({ title: 'Renamed' })),
       );
 
-      const result = await service.update(storyId, id, {
+      const result = await service.update(storyId, id, user, {
         chapter_name: 'Renamed',
       });
 
@@ -269,7 +279,7 @@ describe('ChapterService', () => {
         execResolving(chapterDoc()),
       );
 
-      await service.update(storyId, id, {});
+      await service.update(storyId, id, user, {});
 
       expect(chapterModel.findOneAndUpdate.mock.calls[0][1]).toEqual({});
       expect(storyService.renameChapter).not.toHaveBeenCalled();
@@ -279,7 +289,7 @@ describe('ChapterService', () => {
       chapterModel.findOneAndUpdate.mockReturnValue(execResolving(null));
 
       const error = await service
-        .update(storyId, id, { chapter_name: 'Renamed' })
+        .update(storyId, id, user, { chapter_name: 'Renamed' })
         .catch((e: unknown) => e);
 
       expect((error as AppException).getStatus()).toBe(404);
@@ -297,7 +307,7 @@ describe('ChapterService', () => {
         execResolving({ _id: id, order: 1 }),
       );
 
-      await expect(service.remove(storyId, id)).resolves.toBeUndefined();
+      await expect(service.remove(storyId, id, user)).resolves.toBeUndefined();
       expect(chapterModel.findOneAndDelete).toHaveBeenCalledWith({
         _id: id,
         storyId,
@@ -312,7 +322,9 @@ describe('ChapterService', () => {
     it('throws a 404 and changes nothing else when the story has no such chapter', async () => {
       chapterModel.findOneAndDelete.mockReturnValue(execResolving(null));
 
-      const error = await service.remove(storyId, id).catch((e: unknown) => e);
+      const error = await service
+        .remove(storyId, id, user)
+        .catch((e: unknown) => e);
 
       expect((error as AppException).getStatus()).toBe(404);
       expect(storyService.removeChapter).not.toHaveBeenCalled();
@@ -326,7 +338,7 @@ describe('ChapterService', () => {
         execResolving(chapterDoc({ script: lionScript })),
       );
 
-      const result = await service.saveScript(storyId, id, script);
+      const result = await service.saveScript(storyId, id, user, script);
 
       expect(chapterModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: id, storyId },
@@ -341,17 +353,16 @@ describe('ChapterService', () => {
     });
 
     it('rejects a script that uses a character the story does not have', async () => {
-      storyService.findWithAuthorName.mockResolvedValue({
-        story: new StoryModel({
+      storyService.findOwnStory.mockResolvedValue(
+        new StoryModel({
           _id: storyId,
           authorId: story.authorId,
           title: story.title,
         }),
-        author: 'mock-author',
-      });
+      );
 
       const error = await service
-        .saveScript(storyId, id, script)
+        .saveScript(storyId, id, user, script)
         .catch((e: unknown) => e);
 
       expect((error as AppException).getStatus()).toBe(400);
@@ -369,10 +380,36 @@ describe('ChapterService', () => {
       chapterModel.findOneAndUpdate.mockReturnValue(execResolving(null));
 
       const error = await service
-        .saveScript(storyId, id, script)
+        .saveScript(storyId, id, user, script)
         .catch((e: unknown) => e);
 
       expect((error as AppException).getStatus()).toBe(404);
+    });
+  });
+
+  describe('when someone other than the author tries', () => {
+    beforeEach(() => {
+      storyService.findOwnStory.mockRejectedValue(
+        AppException.forbidden('Only the author can change this story'),
+      );
+    });
+
+    it.each([
+      ['create', () => service.create(storyId, user, { chapter_name: 'X' })],
+      [
+        'update',
+        () => service.update(storyId, id, user, { chapter_name: 'X' }),
+      ],
+      ['remove', () => service.remove(storyId, id, user)],
+      ['saveScript', () => service.saveScript(storyId, id, user, script)],
+    ])('to %s, it throws a 403 and changes nothing', async (_label, call) => {
+      const error = await call().catch((e: unknown) => e);
+
+      expect((error as AppException).getStatus()).toBe(403);
+      expect(storyService.findOwnStory).toHaveBeenCalledWith(storyId, user._id);
+      expect(chapterModel.create).not.toHaveBeenCalled();
+      expect(chapterModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(chapterModel.findOneAndDelete).not.toHaveBeenCalled();
     });
   });
 });

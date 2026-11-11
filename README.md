@@ -68,12 +68,17 @@ Routes use the `/api` prefix and URI version `v1`; for example:
 - `POST /api/v1/user` — create-user scaffold
 - `GET /api/v1/user` — list users (admins only)
 - `GET /api/v1/user/:id` — get a user by id (admins only)
-- `PATCH /api/v1/user/:id` — update-user scaffold
-- `DELETE /api/v1/user/:id` — delete-user scaffold
+- `PATCH /api/v1/user` — update your own profile (logged in)
+- `PATCH /api/v1/user/:id` — update any user's profile (admins only)
 - `POST /api/v1/auth/login` — log in with email and password, returns a token
 - `POST /api/v1/auth/forgot-password` — send a password reset link
 - `POST /api/v1/auth/reset-password` — set a new password with the reset token
 - `GET /api/v1/auth/me` — the logged in user (send `Authorization: Bearer <token>`)
+
+Anyone can read stories and chapters without logging in. Creating a story
+needs a login, and the logged in user becomes its author. Changing a story
+(update, delete, uploading its file) or its chapters (add, rename, delete,
+save script) is only allowed for the story's author, anyone else gets a 403.
 
 ## Common commands
 
