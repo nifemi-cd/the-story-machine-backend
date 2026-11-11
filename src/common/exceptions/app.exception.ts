@@ -27,6 +27,16 @@ export class AppException extends HttpException {
     return new AppException(HttpStatus.BAD_REQUEST, message, errors);
   }
 
+  // returns a 401 error
+  static unauthorized(message: string) {
+    return new AppException(HttpStatus.UNAUTHORIZED, message);
+  }
+
+  // returns a 403 error, for when the user is logged in but isn't allowed
+  static forbidden(message: string) {
+    return new AppException(HttpStatus.FORBIDDEN, message);
+  }
+
   // returns a 409 error
   static conflict(message: string, errors?: FieldError[]) {
     return new AppException(HttpStatus.CONFLICT, message, errors);

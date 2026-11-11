@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { AppException } from '../common/exceptions/app.exception.js';
 import type { StoryDocument } from '../story/entities/story.entity.js';
 import { StoryService } from '../story/story.service.js';
+import type { UserDocument } from '../user/entities/user.entity.js';
 import { CreateChapterDto } from './dto/create-chapter.dto.js';
 import { UpdateChapterDto } from './dto/update-chapter.dto.js';
 import { ScriptDto } from './dto/script.dto.js';
@@ -26,6 +27,8 @@ export type ChapterSummary = Omit<ChapterView, 'characters' | 'story'>;
 // In the database a chapter's name is "title" and its script is "script".
 // The API uses the contract names (chapter_name and story) instead, so the
 // toView/toSummary helpers at the bottom do the renaming.
+// Only the story's author can add, change or delete its chapters, so those
+// methods take the logged in user. Reading chapters is open to everyone.
 @Injectable()
 export class ChapterService {
   constructor(
@@ -36,10 +39,10 @@ export class ChapterService {
   // adds a chapter to the end of the story and returns it
   async create(
     storyId: Types.ObjectId,
+    user: UserDocument,
     { chapter_name, story: script }: CreateChapterDto,
   ): Promise<ChapterView> {
-    const { story, author } =
-      await this.storyService.findWithAuthorName(storyId);
+    const { story, author } = await this.ownStory(storyId, user);
     // the script is under "story" in the body so errors should say story.lines... etc
     if (script) this.assertValidScript(script, story, 'story.');
 
@@ -97,10 +100,10 @@ export class ChapterService {
   async update(
     storyId: Types.ObjectId,
     id: Types.ObjectId,
+    user: UserDocument,
     { chapter_name }: UpdateChapterDto,
   ): Promise<ChapterView> {
-    const { story, author } =
-      await this.storyService.findWithAuthorName(storyId);
+    const { story, author } = await this.ownStory(storyId, user);
 
     const chapter = await this.chapterModel
       .findOneAndUpdate(
@@ -121,7 +124,13 @@ export class ChapterService {
   }
 
   // deletes the chapter and fixes the order of the ones after it
-  async remove(storyId: Types.ObjectId, id: Types.ObjectId): Promise<void> {
+  async remove(
+    storyId: Types.ObjectId,
+    id: Types.ObjectId,
+    user: UserDocument,
+  ): Promise<void> {
+    await this.storyService.findOwnStory(storyId, user._id);
+
     const chapter = await this.chapterModel
       .findOneAndDelete({ _id: id, storyId })
       .exec();
@@ -143,11 +152,11 @@ export class ChapterService {
   async saveScript(
     storyId: Types.ObjectId,
     id: Types.ObjectId,
+    user: UserDocument,
     scriptDto: ScriptDto,
   ): Promise<ChapterView> {
     // need the story here to check dialogue against its characters
-    const { story, author } =
-      await this.storyService.findWithAuthorName(storyId);
+    const { story, author } = await this.ownStory(storyId, user);
     this.assertValidScript(scriptDto, story);
 
     const chapter = await this.chapterModel
@@ -161,6 +170,18 @@ export class ChapterService {
       throw AppException.notfound('Chapter not found');
     }
     return toView(chapter, story, author);
+  }
+
+  // returns the story and its author's username if this user wrote it
+  // throws a 404 if the story doesn't exist, or a 403 if someone else wrote it.
+  // the user is the author, so their username is the author name and there's
+  // no need to look it up like findWithAuthorName does
+  private async ownStory(
+    storyId: Types.ObjectId,
+    user: UserDocument,
+  ): Promise<{ story: StoryDocument; author: string }> {
+    const story = await this.storyService.findOwnStory(storyId, user._id);
+    return { story, author: user.username };
   }
 
   // returns the chapter or throws a 404
