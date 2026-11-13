@@ -20,13 +20,16 @@ describe('StoryService', () => {
   // the logged in user, who wrote the stories below unless a test says otherwise
   const userId = new Types.ObjectId(authorId);
   const someoneElse = new Types.ObjectId();
-  // find() is chained (sort, skip, limit) so each step returns the same mock
+  // find() is chained (sort, skip, limit, populate) so each step returns the same mock
   const query = {
     sort: vi.fn(() => query),
     skip: vi.fn(() => query),
     limit: vi.fn(() => query),
+    populate: vi.fn(() => query),
     exec: vi.fn(),
   };
+  // what the GET routes ask mongoose to fill in for each story
+  const authorFields = { path: 'author', select: 'displayName -_id' };
   const storyModel = {
     create: vi.fn(),
     find: vi.fn(() => query),
@@ -151,20 +154,39 @@ describe('StoryService', () => {
       expect(storyModel.find).toHaveBeenCalledWith(filter);
       expect(storyModel.countDocuments).toHaveBeenCalledWith(filter);
     });
+
+    it("fills in each story's author with only their display name", async () => {
+      await service.findAll({ page: 1, limit: 20 });
+
+      expect(query.populate).toHaveBeenCalledWith(authorFields);
+    });
   });
 
   describe('findOne', () => {
     const id = new Types.ObjectId();
 
-    it('returns the story', async () => {
-      const story = { _id: id, title: 'a' };
-      storyModel.findById.mockReturnValue(execResolving(story));
+    // findById(...).populate(...).exec()
+    const storyPopulated = (value: unknown) => {
+      const populate = vi.fn(() => execResolving(value));
+      storyModel.findById.mockReturnValue({ populate });
+      return populate;
+    };
+
+    it("returns the story with its author's display name filled in", async () => {
+      const story = {
+        _id: id,
+        title: 'a',
+        author: { _id: userId, displayName: 'Ada Writes' },
+      };
+      const populate = storyPopulated(story);
 
       await expect(service.findOne(id)).resolves.toBe(story);
+      expect(storyModel.findById).toHaveBeenCalledWith(id);
+      expect(populate).toHaveBeenCalledWith(authorFields);
     });
 
     it('throws a 404 when the story does not exist', async () => {
-      storyModel.findById.mockReturnValue(execResolving(null));
+      storyPopulated(null);
 
       const error = await service.findOne(id).catch((e: unknown) => e);
 
