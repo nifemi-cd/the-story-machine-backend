@@ -17,6 +17,12 @@ import {
 } from './entities/story.entity.js';
 import { StoryStatus } from './enums/story-status.enum.js';
 
+// which author fields the GET routes send with each story
+// only the display name, so nothing private about the user ends up in a story.
+// -_id because authorId already has it, mongoose still matches the users to
+// their stories without it
+const AUTHOR_FIELDS = { path: 'author', select: 'displayName -_id' };
+
 @Injectable()
 export class StoryService {
   constructor(
@@ -59,6 +65,8 @@ export class StoryService {
         .sort({ createdAt: -1, _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
+        // one extra query for the whole page, not one per story
+        .populate(AUTHOR_FIELDS)
         .exec(),
       this.storyModel.countDocuments(filter).exec(),
     ]);
@@ -69,9 +77,16 @@ export class StoryService {
     };
   }
 
-  // returns one story or throws a 404
-  async findOne(id: Types.ObjectId) {
-    return await this.findStoryById(id);
+  // returns one story with its author's display name, or throws a 404
+  async findOne(id: Types.ObjectId): Promise<StoryDocument> {
+    const story = await this.storyModel
+      .findById(id)
+      .populate(AUTHOR_FIELDS)
+      .exec();
+    if (!story) {
+      throw AppException.notfound('Story not found');
+    }
+    return story;
   }
 
   // returns the story and its author's username
