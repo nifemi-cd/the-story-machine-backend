@@ -109,13 +109,39 @@ describe('Stories (e2e)', () => {
       const res = await api().get('/api/v1/story?limit=1').expect(200);
 
       expect(res.body.data).toHaveLength(1);
-      expect(res.body.data[0].title).toBe('Second');
+      expect(res.body.data[0]).toMatchObject({
+        title: 'Second',
+        // signUpAndLogin doesn't send one, so it defaults to the username
+        author: { displayName: 'ada_writes' },
+      });
       expect(res.body.meta).toEqual({
         page: 1,
         limit: 1,
         total: 2,
         totalPages: 2,
       });
+    });
+
+    it('gives each story its own author when several people wrote them', async () => {
+      await createStory('By Ada');
+      const bob = await signUpAndLogin(testApp, 'bob_writes');
+      await api()
+        .post('/api/v1/story')
+        .set('Authorization', bob.auth)
+        .send({ title: 'By Bob' })
+        .expect(201);
+
+      const res = await api().get('/api/v1/story').expect(200);
+
+      expect(
+        res.body.data.map((s: { title: string; author: object }) => [
+          s.title,
+          s.author,
+        ]),
+      ).toEqual([
+        ['By Bob', { displayName: 'bob_writes' }],
+        ['By Ada', { displayName: 'ada_writes' }],
+      ]);
     });
 
     it('filters by status', async () => {
@@ -147,8 +173,27 @@ describe('Stories (e2e)', () => {
 
       expect(res.body.data).toMatchObject({
         _id: id,
+        authorId,
         title: 'The Lighthouse Keeper',
       });
+      // only the display name. no _id since authorId already has it, and
+      // nothing private about the author
+      expect(res.body.data.author).toEqual({ displayName: 'ada_writes' });
+      // turning on virtuals for toJSON shouldn't add an id copy of _id
+      expect(res.body.data).not.toHaveProperty('id');
+    });
+
+    it('shows the new display name after the author changes it', async () => {
+      const id = await createStory();
+      await api()
+        .patch('/api/v1/user')
+        .set('Authorization', auth)
+        .send({ displayName: 'Ada Lovelace' })
+        .expect(200);
+
+      const res = await api().get(`/api/v1/story/${id}`).expect(200);
+
+      expect(res.body.data.author.displayName).toBe('Ada Lovelace');
     });
 
     it('rejects an id that is not 24-character hex', async () => {

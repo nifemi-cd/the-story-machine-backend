@@ -54,7 +54,9 @@ export class Character {
 
 export const CharacterSchema = SchemaFactory.createForClass(Character);
 
-@Schema({ timestamps: true })
+// id: false because turning on virtuals for toJSON (below) would also add an
+// "id" copy of _id to every story
+@Schema({ timestamps: true, id: false })
 export class Story {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: User.name, required: true })
   authorId: Types.ObjectId;
@@ -101,6 +103,9 @@ export class Story {
 
   createdAt: Date;
   updatedAt: Date;
+
+  // not saved, filled in by .populate('author'), see the virtual below
+  author?: Pick<User, 'displayName'> & { _id: Types.ObjectId };
 }
 
 export type StoryDocument = HydratedDocument<Story>;
@@ -111,4 +116,15 @@ StorySchema.index({ authorId: 1, createdAt: -1 });
 // for the published feed
 StorySchema.index({ status: 1, createdAt: -1 });
 
-StorySchema.set('toJSON', { versionKey: false });
+// the author's user, found through authorId. a virtual instead of populating
+// authorId itself, so authorId stays a plain id in the response and the
+// author only checks can keep comparing it to the logged in user's id
+StorySchema.virtual('author', {
+  ref: User.name,
+  localField: 'authorId',
+  foreignField: '_id',
+  justOne: true,
+});
+
+// virtuals: true so a populated author is sent back with the story
+StorySchema.set('toJSON', { versionKey: false, virtuals: true });

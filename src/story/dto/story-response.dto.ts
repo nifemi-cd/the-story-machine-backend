@@ -46,6 +46,12 @@ export class CharacterResponseDto {
   emotions: EmotionResponseDto[];
 }
 
+// no _id, the story's authorId already has it
+export class StoryAuthorResponseDto {
+  @ApiProperty({ example: 'Ada Writes' })
+  displayName: string;
+}
+
 export class StoryResponseDto {
   @ApiProperty({
     description: 'Database id; use it in /story/:id',
@@ -55,6 +61,13 @@ export class StoryResponseDto {
 
   @ApiProperty({ example: '6ad4306d3168a59d2918aead' })
   authorId: string;
+
+  @ApiProperty({
+    description: 'The author. Only sent by GET /story and GET /story/:id',
+    required: false,
+    type: StoryAuthorResponseDto,
+  })
+  author?: StoryAuthorResponseDto;
 
   @ApiProperty({ example: 'The Lighthouse Keeper' })
   title: string;
