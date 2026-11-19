@@ -26,7 +26,6 @@ import {
 } from '../common/swagger/api-response.decorators.js';
 import { ApiObjectIdParam } from '../common/swagger/api-param.decorators.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
-import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
@@ -75,31 +74,41 @@ export class UserController {
     return this.userService.findAll(query);
   }
 
-  // returns the full user for admins, and only the public profile for
-  // everyone else (logged in or not)
+  // returns one user with all their fields, admins only
   @Get(':id')
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Admin)
   @ResponseMessage('User fetched')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get a user by id',
     description:
-      'Anyone can call this and gets the public profile (username, displayName, bio, profileUrl, follower counts and createdAt). Admins get the full user, including email and roles.',
+      'Admins only. Everyone else uses GET /user/:id/profile for the public profile.',
   })
   @ApiObjectIdParam('User')
-  @ApiEnvelope([PublicProfileResponseDto, UserResponseDto], {
-    description: 'User fetched',
-  })
+  @ApiEnvelope(UserResponseDto, { description: 'User fetched' })
   @ApiError(400, 'The id is not a valid 24-character hex string')
-  @ApiError(401, 'A login token was sent but it has expired or is invalid')
+  @ApiError(401, 'Login required')
+  @ApiError(403, 'You do not have permission to do this')
   @ApiError(404, 'User not found')
-  findOne(
-    @Param('id', ParseObjectIdPipe) id: Types.ObjectId,
-    @CurrentUser() user?: UserDocument,
-  ) {
-    return user?.roles.includes(UserRole.Admin)
-      ? this.userService.findOne(id)
-      : this.userService.findPublicProfile(id);
+  findOne(@Param('id', ParseObjectIdPipe) id: Types.ObjectId) {
+    return this.userService.findOne(id);
+  }
+
+  // returns only the public fields of a user, no login needed
+  @Get(':id/profile')
+  @ResponseMessage('Profile fetched')
+  @ApiOperation({
+    summary: "Get a user's public profile",
+    description:
+      'Anyone can call this, no login needed. Never includes email or roles.',
+  })
+  @ApiObjectIdParam('User')
+  @ApiEnvelope(PublicProfileResponseDto, { description: 'Profile fetched' })
+  @ApiError(400, 'The id is not a valid 24-character hex string')
+  @ApiError(404, 'User not found')
+  findProfile(@Param('id', ParseObjectIdPipe) id: Types.ObjectId) {
+    return this.userService.findPublicProfile(id);
   }
 
   // updates the logged in user's own profile and returns it

@@ -5,10 +5,9 @@ import { ApiErrorDoc, PaginationMetaDoc } from './api-response.docs.js';
 // returns the swagger decorators for a successful response
 // The ResponseInterceptor wraps everything in { success, message, data } but
 // swagger has no idea that happens, so this describes the wrapped version.
-// Pass null as the model when data is always null (like after a delete),
-// or a list of models when data can be one of a few shapes.
+// Pass null as the model when data is always null (like after a delete).
 export function ApiEnvelope(
-  model: Type<unknown> | Type<unknown>[] | null,
+  model: Type<unknown> | null,
   options: {
     status?: number;
     description?: string;
@@ -23,19 +22,15 @@ export function ApiEnvelope(
     isArray = false,
   } = options;
 
-  const models = !model ? [] : Array.isArray(model) ? model : [model];
-  const refs = models.map((m) => ({ $ref: getSchemaPath(m) }));
-  const one = refs.length > 1 ? { oneOf: refs } : refs[0];
-
-  const data = !one
+  const data = !model
     ? { type: 'object', nullable: true, example: null }
     : paginated || isArray
-      ? { type: 'array', items: one }
-      : one;
+      ? { type: 'array', items: { $ref: getSchemaPath(model) } }
+      : { $ref: getSchemaPath(model) };
 
   return applyDecorators(
     // the $refs above don't work unless the models are registered
-    ApiExtraModels(...models, PaginationMetaDoc),
+    ApiExtraModels(...(model ? [model] : []), PaginationMetaDoc),
     ApiResponse({
       status,
       description,

@@ -177,9 +177,6 @@ describe('Users (e2e)', () => {
   });
 
   describe('GET /api/v1/user/:id', () => {
-    // fields only admins should ever see on someone else's profile
-    const privateFields = ['email', 'roles', 'updatedAt', 'passwordHash'];
-
     it('gives an admin the full user', async () => {
       const admin = await adminHeader();
       const id = await createUser();
@@ -198,12 +195,54 @@ describe('Users (e2e)', () => {
       expect(res.body.data).not.toHaveProperty('passwordHash');
     });
 
-    it('gives someone who is not logged in only the public profile', async () => {
+    it('rejects an id that is not 24-character hex', async () => {
+      const admin = await adminHeader();
+
+      await api()
+        .get('/api/v1/user/123')
+        .set('Authorization', admin)
+        .expect(400);
+    });
+
+    it('returns 404 for a user that does not exist', async () => {
+      const admin = await adminHeader();
+
+      const res = await api()
+        .get(`/api/v1/user/${missingId}`)
+        .set('Authorization', admin)
+        .expect(404);
+
+      expect(res.body).toEqual({ success: false, message: 'User not found' });
+    });
+
+    it('rejects a request that is not logged in with a 401', async () => {
       const id = await createUser();
 
-      const res = await api().get(`/api/v1/user/${id}`).expect(200);
+      await api().get(`/api/v1/user/${id}`).expect(401);
+    });
 
-      expect(res.body.data).toMatchObject({
+    it('rejects a user who is not an admin with a 403, even for themselves', async () => {
+      const id = await createUser();
+      const reader = await authHeader();
+
+      await api()
+        .get(`/api/v1/user/${id}`)
+        .set('Authorization', reader)
+        .expect(403);
+    });
+  });
+
+  describe('GET /api/v1/user/:id/profile', () => {
+    // fields that should never show up on a public profile
+    const privateFields = ['email', 'roles', 'updatedAt', 'passwordHash'];
+
+    it('returns only the public fields without needing a login', async () => {
+      const id = await createUser();
+
+      const res = await api().get(`/api/v1/user/${id}/profile`).expect(200);
+
+      expect(res.body.message).toBe('Profile fetched');
+      expect(res.body.data).toEqual({
         _id: id,
         username: 'ada_writes',
         displayName: 'ada_writes',
@@ -213,41 +252,30 @@ describe('Users (e2e)', () => {
         followingCount: 0,
         createdAt: expect.any(String),
       });
-      for (const field of privateFields) {
-        expect(res.body.data).not.toHaveProperty(field);
-      }
     });
 
-    it('gives a logged in user who is not an admin only the public profile, even for themselves', async () => {
+    it('still only returns the public fields when an admin asks', async () => {
       const id = await createUser();
-      const reader = await authHeader();
+      const admin = await adminHeader();
 
       const res = await api()
-        .get(`/api/v1/user/${id}`)
-        .set('Authorization', reader)
+        .get(`/api/v1/user/${id}/profile`)
+        .set('Authorization', admin)
         .expect(200);
 
-      expect(res.body.data.username).toBe('ada_writes');
       for (const field of privateFields) {
         expect(res.body.data).not.toHaveProperty(field);
       }
-    });
-
-    it('rejects a login token that is not valid with a 401', async () => {
-      const id = await createUser();
-
-      await api()
-        .get(`/api/v1/user/${id}`)
-        .set('Authorization', 'Bearer not-a-real-token')
-        .expect(401);
     });
 
     it('rejects an id that is not 24-character hex', async () => {
-      await api().get('/api/v1/user/123').expect(400);
+      await api().get('/api/v1/user/123/profile').expect(400);
     });
 
     it('returns 404 for a user that does not exist', async () => {
-      const res = await api().get(`/api/v1/user/${missingId}`).expect(404);
+      const res = await api()
+        .get(`/api/v1/user/${missingId}/profile`)
+        .expect(404);
 
       expect(res.body).toEqual({ success: false, message: 'User not found' });
     });

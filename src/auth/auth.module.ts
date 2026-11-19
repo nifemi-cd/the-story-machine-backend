@@ -6,7 +6,6 @@ import { User, UserSchema } from '../user/entities/user.entity.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
-import { OptionalJwtAuthGuard } from './guards/optional-jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
 import { getJwtExpiresIn } from './jwt.config.js';
 import { MailModule } from '../mail/mail.module.js';
@@ -27,9 +26,9 @@ import { MailModule } from '../mail/mail.module.js';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, OptionalJwtAuthGuard, RolesGuard],
+  providers: [AuthService, JwtAuthGuard, RolesGuard],
   // other modules import AuthModule to protect their routes with
   // JwtAuthGuard and RolesGuard
-  exports: [JwtAuthGuard, OptionalJwtAuthGuard, RolesGuard, JwtModule],
+  exports: [JwtAuthGuard, RolesGuard, JwtModule],
 })
 export class AuthModule {}

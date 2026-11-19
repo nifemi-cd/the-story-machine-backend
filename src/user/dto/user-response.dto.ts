@@ -45,7 +45,7 @@ export class UserResponseDto {
   updatedAt: Date;
 }
 
-// what non admins get from GET /user/:id, same fields as PUBLIC_PROFILE_FIELDS
+// what GET /user/:id/profile returns, same fields as PUBLIC_PROFILE_FIELDS
 export class PublicProfileResponseDto extends PickType(UserResponseDto, [
   '_id',
   'username',
