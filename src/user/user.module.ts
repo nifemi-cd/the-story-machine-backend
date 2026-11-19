@@ -8,7 +8,7 @@ import { AuthModule } from '../auth/auth.module.js';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
-    // for the guards that keep listing and getting users admin only
+    // for the login and admin guards on the user routes
     AuthModule,
   ],
   controllers: [UserController],

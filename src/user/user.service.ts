@@ -17,6 +17,18 @@ import {
 // exported so the password reset in AuthService hashes the same way
 export const SALT_ROUNDS = 12;
 
+// what anyone can see on someone's profile. listing the fields to keep
+// instead of the ones to hide means a private field added later can't leak
+export const PUBLIC_PROFILE_FIELDS = [
+  'username',
+  'displayName',
+  'bio',
+  'profileUrl',
+  'followerCount',
+  'followingCount',
+  'createdAt',
+] as const;
+
 // error code mongo gives when a unique index is broken
 const DUPLICATE_KEY = 11000;
 
@@ -89,6 +101,18 @@ export class UserService {
   // returns one user or throws a 404
   async findOne(id: Types.ObjectId) {
     return await this.findUserById(id);
+  }
+
+  // returns only the public fields of a user, or throws a 404
+  async findPublicProfile(id: Types.ObjectId): Promise<UserDocument> {
+    const user = await this.userModel
+      .findById(id)
+      .select(PUBLIC_PROFILE_FIELDS.join(' '))
+      .exec();
+    if (!user) {
+      throw AppException.notfound('User not found');
+    }
+    return user;
   }
 
   // updates the fields that were sent and returns the updated user

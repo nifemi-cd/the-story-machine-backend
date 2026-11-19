@@ -177,7 +177,10 @@ describe('Users (e2e)', () => {
   });
 
   describe('GET /api/v1/user/:id', () => {
-    it('returns the user', async () => {
+    // fields only admins should ever see on someone else's profile
+    const privateFields = ['email', 'roles', 'updatedAt', 'passwordHash'];
+
+    it('gives an admin the full user', async () => {
       const admin = await adminHeader();
       const id = await createUser();
 
@@ -186,44 +189,67 @@ describe('Users (e2e)', () => {
         .set('Authorization', admin)
         .expect(200);
 
-      expect(res.body.data).toMatchObject({ _id: id, username: 'ada_writes' });
+      expect(res.body.data).toMatchObject({
+        _id: id,
+        username: 'ada_writes',
+        email: 'ada@example.com',
+        roles: ['user'],
+      });
       expect(res.body.data).not.toHaveProperty('passwordHash');
     });
 
-    it('rejects an id that is not 24-character hex', async () => {
-      const admin = await adminHeader();
-
-      await api()
-        .get('/api/v1/user/123')
-        .set('Authorization', admin)
-        .expect(400);
-    });
-
-    it('returns 404 for a user that does not exist', async () => {
-      const admin = await adminHeader();
-
-      const res = await api()
-        .get(`/api/v1/user/${missingId}`)
-        .set('Authorization', admin)
-        .expect(404);
-
-      expect(res.body).toEqual({ success: false, message: 'User not found' });
-    });
-
-    it('rejects a request that is not logged in with a 401', async () => {
+    it('gives someone who is not logged in only the public profile', async () => {
       const id = await createUser();
 
-      await api().get(`/api/v1/user/${id}`).expect(401);
+      const res = await api().get(`/api/v1/user/${id}`).expect(200);
+
+      expect(res.body.data).toMatchObject({
+        _id: id,
+        username: 'ada_writes',
+        displayName: 'ada_writes',
+        bio: '',
+        profileUrl: '',
+        followerCount: 0,
+        followingCount: 0,
+        createdAt: expect.any(String),
+      });
+      for (const field of privateFields) {
+        expect(res.body.data).not.toHaveProperty(field);
+      }
     });
 
-    it('rejects a user who is not an admin with a 403, even for themselves', async () => {
+    it('gives a logged in user who is not an admin only the public profile, even for themselves', async () => {
       const id = await createUser();
       const reader = await authHeader();
 
-      await api()
+      const res = await api()
         .get(`/api/v1/user/${id}`)
         .set('Authorization', reader)
-        .expect(403);
+        .expect(200);
+
+      expect(res.body.data.username).toBe('ada_writes');
+      for (const field of privateFields) {
+        expect(res.body.data).not.toHaveProperty(field);
+      }
+    });
+
+    it('rejects a login token that is not valid with a 401', async () => {
+      const id = await createUser();
+
+      await api()
+        .get(`/api/v1/user/${id}`)
+        .set('Authorization', 'Bearer not-a-real-token')
+        .expect(401);
+    });
+
+    it('rejects an id that is not 24-character hex', async () => {
+      await api().get('/api/v1/user/123').expect(400);
+    });
+
+    it('returns 404 for a user that does not exist', async () => {
+      const res = await api().get(`/api/v1/user/${missingId}`).expect(404);
+
+      expect(res.body).toEqual({ success: false, message: 'User not found' });
     });
   });
 
