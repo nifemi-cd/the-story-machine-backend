@@ -26,6 +26,24 @@ jobs:
       # Unit and e2e tests together, with one coverage report for both.
       # The e2e tests use an in-memory MongoDB and fake file storage, so no secrets needed
       - run: npm run test:cov
+      # put the coverage numbers on the run's summary page, so every run has its own evidence
+      - name: Coverage summary
+        if: always() && hashFiles('coverage/coverage-summary.json') != ''
+        run: |
+          {
+            echo "## Coverage"
+            echo "| Metric | Covered | Total | % |"
+            echo "|---|---|---|---|"
+            jq -r '.total | to_entries[] | select(.key != "branchesTrue") | "| \(.key) | \(.value.covered) | \(.value.total) | \(.value.pct)% |"' coverage/coverage-summary.json
+          } >> "$GITHUB_STEP_SUMMARY"
+      # keep the full report (including the html one) downloadable from the run page
+      - name: Upload coverage report
+        if: always() && hashFiles('coverage/coverage-summary.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
 

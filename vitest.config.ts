@@ -32,6 +32,9 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       // main.ts only starts the server, the e2e tests run the same setup through app.setup.ts
       exclude: ['src/**/*.spec.ts', 'src/main.ts'],
+      // text for the terminal, json-summary so CI can post the numbers on the run page,
+      // html for a report you can open in a browser
+      reporter: ['text', 'json-summary', 'html'],
     },
   },
 });
