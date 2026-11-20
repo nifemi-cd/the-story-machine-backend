@@ -46,9 +46,9 @@ We run **every test, every time**, instead of picking a subset based on what cha
 ## 4 How long it takes
 
 - **Regression suite alone:** about **25–30 seconds** on a laptop (`npm run test:cov`: 319 tests in 30 files). The tests run in parallel, so the total test time (about 75–85 seconds) is spread across several CPU cores. The first run on a new machine is slower because it has to download the in-memory MongoDB binary.
-- **Full CI job on GitHub Actions** (install, lint, format, type check, tests, build, audit): about 2Mins per run, show on each run on the [Actions page](https://github.com/nifemi-cd/the-story-machine-backend/actions/workflows/ci.yml).
+- **Full CI job on GitHub Actions** (install, lint, format, type check, tests, build, audit): about 2 minutes per run, show on each run on the [Actions page](https://github.com/nifemi-cd/the-story-machine-backend/actions/workflows/ci.yml).
 
-Since a full CI run takes about 2 minutes, running the whole suite on every pull request costs us very little. If the suite grows enough to slow down reviews, we plan to run only the fast unit tests on every PR update and keep the full suite for merges into staging and main
+Since a full CI run takes about 2 minutes, running the whole suite on every pull request costs us very little. If the suite grows enough to slow down reviews, we plan to run only the fast unit tests on every PR update and keep the full suite for merges into develop, staging and main.
 
 ## 5 What happens when a test fails
 
@@ -61,7 +61,7 @@ Since a full CI run takes about 2 minutes, running the whole suite on every pull
 ## 6 Recent results
 
 - **Latest local run (20/11/2026):** 30 test files, **319 / 319 tests passed** in 24.9 s.
-- **Latest CI run:** [CI run](https://github.com/nifemi-cd/the-story-machine-backend/actions/runs/44487709155) 
+- **Latest CI run:** [CI run](https://github.com/nifemi-cd/the-story-machine-backend/actions/runs/44798324806). All checks passed, with the coverage table on its summary page.
 
 Every CI run now posts its **coverage table on the run's summary page**, and the full HTML coverage report can be downloaded from that run as the `coverage-report` artifact (kept for 30 days). Each run has its own evidence; nobody has to copy numbers in by hand.
 
