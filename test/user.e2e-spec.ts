@@ -177,7 +177,7 @@ describe('Users (e2e)', () => {
   });
 
   describe('GET /api/v1/user/:id', () => {
-    it('returns the user', async () => {
+    it('gives an admin the full user', async () => {
       const admin = await adminHeader();
       const id = await createUser();
 
@@ -186,7 +186,12 @@ describe('Users (e2e)', () => {
         .set('Authorization', admin)
         .expect(200);
 
-      expect(res.body.data).toMatchObject({ _id: id, username: 'ada_writes' });
+      expect(res.body.data).toMatchObject({
+        _id: id,
+        username: 'ada_writes',
+        email: 'ada@example.com',
+        roles: ['user'],
+      });
       expect(res.body.data).not.toHaveProperty('passwordHash');
     });
 
@@ -224,6 +229,55 @@ describe('Users (e2e)', () => {
         .get(`/api/v1/user/${id}`)
         .set('Authorization', reader)
         .expect(403);
+    });
+  });
+
+  describe('GET /api/v1/user/:id/profile', () => {
+    // fields that should never show up on a public profile
+    const privateFields = ['email', 'roles', 'updatedAt', 'passwordHash'];
+
+    it('returns only the public fields without needing a login', async () => {
+      const id = await createUser();
+
+      const res = await api().get(`/api/v1/user/${id}/profile`).expect(200);
+
+      expect(res.body.message).toBe('Profile fetched');
+      expect(res.body.data).toEqual({
+        _id: id,
+        username: 'ada_writes',
+        displayName: 'ada_writes',
+        bio: '',
+        profileUrl: '',
+        followerCount: 0,
+        followingCount: 0,
+        createdAt: expect.any(String),
+      });
+    });
+
+    it('still only returns the public fields when an admin asks', async () => {
+      const id = await createUser();
+      const admin = await adminHeader();
+
+      const res = await api()
+        .get(`/api/v1/user/${id}/profile`)
+        .set('Authorization', admin)
+        .expect(200);
+
+      for (const field of privateFields) {
+        expect(res.body.data).not.toHaveProperty(field);
+      }
+    });
+
+    it('rejects an id that is not 24-character hex', async () => {
+      await api().get('/api/v1/user/123/profile').expect(400);
+    });
+
+    it('returns 404 for a user that does not exist', async () => {
+      const res = await api()
+        .get(`/api/v1/user/${missingId}/profile`)
+        .expect(404);
+
+      expect(res.body).toEqual({ success: false, message: 'User not found' });
     });
   });
 

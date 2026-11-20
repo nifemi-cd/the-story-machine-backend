@@ -1,7 +1,11 @@
 name: CD
 
+# Runs only after the CI workflow finishes on main, so a change that fails
+# the regression suite can never reach production.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -16,11 +20,19 @@ permissions:
 jobs:
   deploy:
     name: Deploy API to Azure
+    # deploy only if CI passed on a push to main (not a PR run), or when started by hand
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     env:
-      IMAGE: comp4350acr.azurecr.io/comp4350-api:${{ github.sha }}
+      # the exact commit CI tested (github.sha would be whatever main points to now)
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
 
       - uses: azure/login@v2
         with:
@@ -30,6 +42,7 @@ jobs:
 
       - name: Build and push image to ACR
         run: |
+          IMAGE="comp4350acr.azurecr.io/comp4350-api:$SHA"
           az acr login --name comp4350acr
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
@@ -39,4 +52,23 @@ jobs:
           az containerapp update \
             --name comp4350-api \
             --resource-group comp4350-rg \
-            --image "$IMAGE"
+            --image "comp4350acr.azurecr.io/comp4350-api:$SHA"
+
+      # smoke test: the deployed API has to answer on its root route,
+      # otherwise this job fails and we know the deploy is broken
+      - name: Smoke test
+        run: |
+          FQDN=$(az containerapp show \
+            --name comp4350-api \
+            --resource-group comp4350-rg \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          for i in $(seq 1 10); do
+            if curl -fsS "https://$FQDN/api/v1" > /dev/null; then
+              echo "API is up at https://$FQDN/api/v1"
+              exit 0
+            fi
+            echo "attempt $i failed, retrying in 15s"
+            sleep 15
+          done
+          echo "API did not respond after the deploy"
+          exit 1

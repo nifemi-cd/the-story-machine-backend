@@ -199,6 +199,38 @@ describe('UserService', () => {
     });
   });
 
+  describe('findPublicProfile', () => {
+    const id = new Types.ObjectId();
+    const select = vi.fn();
+
+    // findById(...).select(...).exec() resolving to user
+    function findByIdReturning(user: unknown) {
+      select.mockReturnValue({ exec: () => Promise.resolve(user) });
+      userModel.findById.mockReturnValue({ select });
+    }
+
+    it('only loads the public fields', async () => {
+      const user = { _id: id, username: 'Reader_1' };
+      findByIdReturning(user);
+
+      await expect(service.findPublicProfile(id)).resolves.toBe(user);
+      expect(userModel.findById).toHaveBeenCalledWith(id);
+      expect(select).toHaveBeenCalledWith(
+        'username displayName bio profileUrl followerCount followingCount createdAt',
+      );
+    });
+
+    it('throws a 404 when the user does not exist', async () => {
+      findByIdReturning(null);
+
+      const error = await service
+        .findPublicProfile(id)
+        .catch((e: unknown) => e);
+
+      expect((error as AppException).getStatus()).toBe(404);
+    });
+  });
+
   describe('update', () => {
     const id = new Types.ObjectId();
     const updated = { _id: id, username: 'New_Name', bio: 'Hi' };
