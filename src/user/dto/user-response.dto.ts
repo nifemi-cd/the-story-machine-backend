@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, PickType } from '@nestjs/swagger';
 import { UserRole } from '../enums/user-role.enum.js';
 
 // for swagger only. no passwordHash here since toJSON in the schema strips it
@@ -44,3 +44,15 @@ export class UserResponseDto {
   @ApiProperty({ example: '2026-10-17T21:30:00.000Z' })
   updatedAt: Date;
 }
+
+// what GET /user/:id/profile returns, same fields as PUBLIC_PROFILE_FIELDS
+export class PublicProfileResponseDto extends PickType(UserResponseDto, [
+  '_id',
+  'username',
+  'displayName',
+  'bio',
+  'profileUrl',
+  'followerCount',
+  'followingCount',
+  'createdAt',
+] as const) {}

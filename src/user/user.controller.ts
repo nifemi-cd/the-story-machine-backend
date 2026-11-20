@@ -14,7 +14,10 @@ import { PaginationQueryDto } from '../common/dto/pagination-query.dto.js';
 import { UserService } from './user.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
-import { UserResponseDto } from './dto/user-response.dto.js';
+import {
+  PublicProfileResponseDto,
+  UserResponseDto,
+} from './dto/user-response.dto.js';
 import { ResponseMessage } from '../common/decorators/response-message.decorator.js';
 import { ParseObjectIdPipe } from '../common/pipes/parse-object-id.pipe.js';
 import {
@@ -71,13 +74,17 @@ export class UserController {
     return this.userService.findAll(query);
   }
 
-  // returns one user, admins only
+  // returns one user with all their fields, admins only
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.Admin)
   @ResponseMessage('User fetched')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get a user by id', description: 'Admins only.' })
+  @ApiOperation({
+    summary: 'Get a user by id',
+    description:
+      'Admins only. Everyone else uses GET /user/:id/profile for the public profile.',
+  })
   @ApiObjectIdParam('User')
   @ApiEnvelope(UserResponseDto, { description: 'User fetched' })
   @ApiError(400, 'The id is not a valid 24-character hex string')
@@ -86,6 +93,22 @@ export class UserController {
   @ApiError(404, 'User not found')
   findOne(@Param('id', ParseObjectIdPipe) id: Types.ObjectId) {
     return this.userService.findOne(id);
+  }
+
+  // returns only the public fields of a user, no login needed
+  @Get(':id/profile')
+  @ResponseMessage('Profile fetched')
+  @ApiOperation({
+    summary: "Get a user's public profile",
+    description:
+      'Anyone can call this, no login needed. Never includes email or roles.',
+  })
+  @ApiObjectIdParam('User')
+  @ApiEnvelope(PublicProfileResponseDto, { description: 'Profile fetched' })
+  @ApiError(400, 'The id is not a valid 24-character hex string')
+  @ApiError(404, 'User not found')
+  findProfile(@Param('id', ParseObjectIdPipe) id: Types.ObjectId) {
+    return this.userService.findPublicProfile(id);
   }
 
   // updates the logged in user's own profile and returns it
